@@ -19,8 +19,8 @@ export const CARD_THEMES: Record<CardTheme, { label: string; bg: [string, string
   night: { label: "Night", bg: ["#1d1c2b", "#0e0e16"], text: "#f1f0fa", sub: "#a3a1bd", mark: "#8B78FF" },
 };
 
-const SERIF = `"Source Serif 4 Variable", "Noto Serif", serif`;
-const SANS = `system-ui, -apple-system, Roboto, "Noto Sans", sans-serif`;
+export const SERIF = `"Source Serif 4 Variable", "Noto Serif", serif`;
+export const SANS = `system-ui, -apple-system, Roboto, "Noto Sans", sans-serif`;
 
 type Measure = (text: string) => number;
 
@@ -85,18 +85,21 @@ function loadLogo() {
   }));
 }
 
-export async function renderCard(input: CardInput): Promise<HTMLCanvasElement> {
-  const [W, H] = SIZES[input.format];
-  const theme = CARD_THEMES[input.theme];
+export const CARD_PAD = 96;
+export const FOOTER_H = 96; // reserved at the bottom for the watermark
+
+// Fresh canvas with the theme's gradient and the faint LumaRead watermark already painted
+export async function cardCanvas(format: CardFormat, themeName: CardTheme) {
+  const [W, H] = SIZES[format];
+  const theme = CARD_THEMES[themeName];
   // Canvas won't wait for web fonts; make sure the serif is ready before measuring
-  await Promise.all([document.fonts.load(`500 64px ${SERIF}`), document.fonts.load(`italic 500 64px ${SERIF}`)]).catch(() => undefined);
+  await document.fonts.load(`500 64px ${SERIF}`).catch(() => undefined);
   const img = await loadLogo().catch(() => undefined);
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
-  const pad = 96;
 
   const bg = ctx.createLinearGradient(0, 0, W, H);
   bg.addColorStop(0, theme.bg[0]);
@@ -104,9 +107,8 @@ export async function renderCard(input: CardInput): Promise<HTMLCanvasElement> {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // Watermark: small, centred and faint so the quote stays the focus
-  const footerH = 96;
-  const footerY = H - pad - footerH / 2;
+  // Watermark: small, centred and faint so the content stays the focus
+  const footerY = H - CARD_PAD - FOOTER_H / 2;
   ctx.save();
   ctx.globalAlpha = 0.45;
   ctx.font = `600 28px ${SANS}`;
@@ -116,9 +118,9 @@ export async function renderCard(input: CardInput): Promise<HTMLCanvasElement> {
   const width = (img ? markSize + gap : 0) + ctx.measureText(word).width;
   const x = (W - width) / 2;
   if (img) {
+    ctx.save();
     ctx.beginPath();
     ctx.arc(x + markSize / 2, footerY, markSize / 2, 0, Math.PI * 2);
-    ctx.save();
     ctx.clip();
     ctx.drawImage(img, x, footerY - markSize / 2, markSize, markSize);
     ctx.restore();
@@ -127,6 +129,14 @@ export async function renderCard(input: CardInput): Promise<HTMLCanvasElement> {
   ctx.textBaseline = "middle";
   ctx.fillText(word, x + (img ? markSize + gap : 0), footerY);
   ctx.restore();
+
+  return { canvas, ctx, W, H, theme };
+}
+
+export async function renderCard(input: CardInput): Promise<HTMLCanvasElement> {
+  const { canvas, ctx, W, H, theme } = await cardCanvas(input.format, input.theme);
+  const pad = CARD_PAD;
+  const footerH = FOOTER_H;
 
   // Attribution, bottom-aligned above the footer
   ctx.textBaseline = "alphabetic";

@@ -2,13 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { Copy, Download, Share2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { saveBinaryFile } from "../../lib/saveFile";
-import { CARD_THEMES, renderCard, toPngBlob, type CardFormat, type CardTheme } from "./quoteCard";
+import { CARD_THEMES, toPngBlob, type CardFormat, type CardTheme } from "./quoteCard";
 
 interface Props {
-  quote: string;
-  title: string;
-  author?: string;
-  location?: string;
+  heading: string;
+  alt: string; // describes the image for screen readers
+  caption: string; // sent as text alongside the image where the target app accepts it
+  fileBase: string;
+  render: (format: CardFormat, theme: CardTheme) => Promise<HTMLCanvasElement>;
   onClose: () => void;
 }
 
@@ -22,7 +23,7 @@ async function base64(blob: Blob) {
   return btoa(binary);
 }
 
-export function ShareQuoteDialog({ quote, title, author, location, onClose }: Props) {
+export function ShareImageDialog({ heading, alt, caption, fileBase, render, onClose }: Props) {
   const [format, setFormat] = useState<CardFormat>("story");
   const [theme, setTheme] = useState<CardTheme>("luma");
   const [card, setCard] = useState<{ url: string; blob: Blob }>();
@@ -31,20 +32,20 @@ export function ShareQuoteDialog({ quote, title, author, location, onClose }: Pr
 
   useEffect(() => {
     let current = true;
-    renderCard({ quote, title, author, location, format, theme })
+    render(format, theme)
       .then(toPngBlob)
       .then((blob) => current && setCard({ url: URL.createObjectURL(blob), blob }))
       .catch(() => current && setStatus("Could not create the image."));
     return () => {
       current = false;
     };
-  }, [quote, title, author, location, format, theme]);
+    // render is recreated by callers each render; the card only depends on format and theme here
+  }, [format, theme]);
 
   // Free each preview's object URL once it is replaced or the dialog closes
   useEffect(() => () => card && URL.revokeObjectURL(card.url), [card]);
 
-  const fileName = `lumaread-quote-${format}.png`;
-  const caption = `“${quote}” — ${[title, author].filter(Boolean).join(", ")}`;
+  const fileName = `${fileBase}-${format}.png`;
 
   async function run(action: () => Promise<string | undefined>) {
     setBusy(true);
@@ -59,7 +60,7 @@ export function ShareQuoteDialog({ quote, title, author, location, onClose }: Pr
 
   const share = () =>
     run(async () => {
-      await invoke("plugin:quoteshare|share_image", { payload: { base64: await base64(card!.blob), fileName, text: caption, title: "Share quote" } });
+      await invoke("plugin:quoteshare|share_image", { payload: { base64: await base64(card!.blob), fileName, text: caption, title: heading } });
       return undefined;
     });
   const saveImage = () =>
@@ -72,14 +73,14 @@ export function ShareQuoteDialog({ quote, title, author, location, onClose }: Pr
 
   return (
     <div className="backdrop" onClick={onClose}>
-      <div className="dialog share-dialog" role="dialog" aria-modal="true" aria-label="Share quote" onClick={(e) => e.stopPropagation()}>
+      <div className="dialog share-dialog" role="dialog" aria-modal="true" aria-label={heading} onClick={(e) => e.stopPropagation()}>
         <header className="lookup-header">
-          <h2>Share quote</h2>
+          <h2>{heading}</h2>
           <button className="icon-button" aria-label="Close" onClick={onClose}><X size={20} /></button>
         </header>
 
         <div className={`card-preview ${format}`}>
-          {card ? <img src={card.url} alt={`Quote card: ${quote}`} /> : <span className="muted">Creating image…</span>}
+          {card ? <img src={card.url} alt={alt} /> : <span className="muted">Creating image…</span>}
         </div>
 
         <div className="share-options">

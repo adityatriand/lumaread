@@ -10,13 +10,16 @@ async function highlightAndOpenShare(page: Page) {
   return page.getByRole("dialog", { name: "Share quote" });
 }
 
+// decode() rejects if the preview src is swapped mid-decode (format/theme change); report null so polls retry
 const previewSize = (page: Page) =>
-  page.locator(".card-preview img").evaluate(async (img: HTMLImageElement) => (await img.decode(), [img.naturalWidth, img.naturalHeight]));
+  page.locator(".card-preview img").evaluate((img: HTMLImageElement) =>
+    img.decode().then(() => [img.naturalWidth, img.naturalHeight], () => null),
+  );
 
 test("desktop: quote card renders as a story or square image and saves as PNG", async ({ page }) => {
   const dialog = await highlightAndOpenShare(page);
   await expect(dialog.locator(".card-preview img")).toBeVisible();
-  expect(await previewSize(page)).toEqual([1080, 1920]);
+  await expect.poll(() => previewSize(page)).toEqual([1080, 1920]);
   await expect(dialog.getByRole("button", { name: /Share to Stories/ })).toHaveCount(0);
 
   await dialog.getByRole("radio", { name: "Square" }).click();
