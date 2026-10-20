@@ -1,0 +1,14 @@
+[package]
+name = "tauri-plugin-quoteshare"
+version = "0.1.0"
+description = "Opens the Android share sheet with a quote card image"
+edition = "2021"
+links = "tauri-plugin-quoteshare"
+publish = false
+
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
