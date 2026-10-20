@@ -2,8 +2,6 @@
 
 Personal reading library: import EPUB/PDF, read, highlight, take notes, look up and translate words, search everything. Ships as a macOS `.dmg` and an Android `.apk` from one Tauri 2 + React + TypeScript codebase.
 
-Product and engineering docs: `others/docs/new-feature/lumaread/` (PRD, TRD, ADRs). The docs assume a cloud web app; this build is **on-device only** — see ADR-013…015 there.
-
 ## Features
 
 - **Import** EPUB / PDF (magic-byte check, SHA-256 duplicate detection, 200 MB cap), cover thumbnails
@@ -17,6 +15,7 @@ Product and engineering docs: `others/docs/new-feature/lumaread/` (PRD, TRD, ADR
 - **OCR** for scanned PDFs (tesseract.js, Indonesian + English): the page being read is recognised automatically, "Recognize all pages" makes the whole book searchable; recognised words are selectable and highlightable
 - **Dictionary** (Open English WordNet, Indonesian Wiktionary) with Indonesian root finding (`menatap` → `tatap`)
 - **Translation** Indonesian ⇄ English with Mozilla's Bergamot models, entirely on-device
+- **Reading stats**: active reading time (only while the window is visible and you interacted in the last 2 minutes), pages read, last position, % complete, streaks, pace and time left — for all books or one, over 7/30/90 days, with charts and table views. Achievements share as story/square cards like quotes
 - **Share quote cards**: any selection or highlight becomes a 1080×1920 story or 1080×1080 square image (Luma / Paper / Night). Android opens the system share sheet (Instagram Stories, WhatsApp Status, …) via the local `src-tauri/plugins/quoteshare` plugin; desktop saves or copies the image
 - App-only: in a plain browser `src/main.tsx` shows only an "open the app" screen
 
@@ -48,19 +47,34 @@ pnpm tauri android dev
 pnpm tauri android build --apk --debug --target aarch64
 ```
 
-Release APKs need a signing keystore — not configured yet. E2E tests stub `globalThis.isTauri` and Tauri's IPC to drive the UI in Chrome.
+E2E tests stub `globalThis.isTauri` and Tauri's IPC to drive the UI in Chrome.
+
+## Release
+
+```sh
+pnpm tauri build --target universal-apple-darwin --bundles dmg   # needs: rustup target add x86_64-apple-darwin
+pnpm tauri android build --apk                                    # signed universal APK
+```
+
+- **macOS**: ad-hoc signed (`bundle.macOS.signingIdentity: "-"`), macOS 13.3+. Without a Developer ID the first launch shows
+  "unidentified developer" — right-click the app → Open once. Notarized builds need an Apple Developer account.
+- **Android**: signed with the release key in `~/.lumaread-release/` (`lumaread-release.jks` + `keystore.properties`), read by
+  `src-tauri/gen/android/app/build.gradle.kts`; set `LUMAREAD_KEYSTORE_PROPERTIES` to use another location (CI). Nothing secret is in
+  the repo. **Back up that folder** — without it no update can ever be signed for installed apps.
+- Version lives in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`; Android's versionCode is derived from it.
 
 ## Layout
 
 ```
-src/lib/                 db.ts (IndexedDB v3), anchor.ts, pdf.ts, rects.ts, saveFile.ts
+src/lib/                 db.ts (IndexedDB v4), anchor.ts, pdf.ts, rects.ts, saveFile.ts
 src/features/library/    import, Home, Library
 src/features/reader/     ReaderView (selection, highlights), PdfReader, EpubReader — engines only emit/draw anchors
 src/features/notebook/   Highlights & Notes, editor, Markdown/CSV export
 src/features/search/     text indexing (+ scanned-PDF detection), search
 src/features/ocr/        tesseract worker, selectable OCR text layer
 src/features/lookup/     dictionary, stemmers, Bergamot translation client, panel
-src/features/share/      quote card renderer (canvas) and share dialog
+src/features/stats/      reading sessions, aggregates, charts, Stats page, achievement card
+src/features/share/      card canvas (background + watermark), quote card, generic share dialog
 src/features/settings/   reading prefs, privacy, licences
 scripts/                 build-dictionaries.mjs, fetch-translation-models.mjs
 vite.config.ts           vendor-assets plugin: serves pdf.js / tesseract / Bergamot / data files at /vendor/*
