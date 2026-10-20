@@ -78,8 +78,9 @@ export function PdfReader({ doc, bytes, initial, annotations, tools, onLocation,
       eventBus.on("pagesinit", () => {
         viewer.currentScaleValue = "page-width";
         viewer.currentPageNumber = pdfPage(initial) ?? 1;
-        // pagechanging doesn't fire when the start page is already page 1
+        // pagechanging doesn't fire when the start page is already page 1, so report it here
         setPage(viewer.currentPageNumber);
+        onLocation(pdfAnchor(viewer.currentPageNumber), viewer.currentPageNumber / pdf.numPages, `Page ${viewer.currentPageNumber} / ${pdf.numPages}`);
         ocrRef.current.want(viewer.currentPageNumber, viewer.currentPageNumber + 1);
       });
       eventBus.on("pagechanging", ({ pageNumber }: { pageNumber: number }) => {
