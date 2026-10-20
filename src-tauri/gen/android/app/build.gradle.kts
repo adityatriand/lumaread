@@ -14,8 +14,26 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Release key lives outside the repo; override the location with LUMAREAD_KEYSTORE_PROPERTIES (e.g. on CI)
+val keystoreProperties = Properties().apply {
+    val propFile = file(System.getenv("LUMAREAD_KEYSTORE_PROPERTIES") ?: "${System.getProperty("user.home")}/.lumaread-release/keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 37
+    signingConfigs {
+        create("release") {
+            if (!keystoreProperties.isEmpty) {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
     namespace = "com.lumaread.app"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
@@ -39,6 +57,7 @@ android {
             }
         }
         getByName("release") {
+            if (!keystoreProperties.isEmpty) signingConfig = signingConfigs.getByName("release")
             optimization {
                enable = true
             }
