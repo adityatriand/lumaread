@@ -43,6 +43,12 @@ export function ocrText(words: OcrWord[]): string {
   return lines.filter(Boolean).map((l) => l.join(" ")).join("\n");
 }
 
+export async function recognizeCanvas(canvas: HTMLCanvasElement): Promise<OcrWord[]> {
+  const { data } = await (await worker()).recognize(canvas, {}, { blocks: true });
+  const lines = (data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines));
+  return toOcrWords(lines, canvas.width, canvas.height);
+}
+
 export async function recognizePage(docId: string, page: PDFPageProxy): Promise<OcrPage> {
   const base = page.getViewport({ scale: 1 });
   const viewport = page.getViewport({ scale: RENDER_PX / Math.max(base.width, base.height) });
@@ -51,9 +57,7 @@ export async function recognizePage(docId: string, page: PDFPageProxy): Promise<
   canvas.height = Math.round(viewport.height);
   await page.render({ canvas, viewport }).promise;
 
-  const { data } = await (await worker()).recognize(canvas, {}, { blocks: true });
-  const lines = (data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines));
-  const result: OcrPage = { docId, page: page.pageNumber, words: toOcrWords(lines, canvas.width, canvas.height) };
+  const result: OcrPage = { docId, page: page.pageNumber, words: await recognizeCanvas(canvas) };
   canvas.width = canvas.height = 0; // release the bitmap now, not at GC
 
   await saveOcrPage(result);

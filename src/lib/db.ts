@@ -15,6 +15,7 @@ export interface DocMeta {
   textIndexed?: boolean; // texts store holds every page/section
   pageCount?: number; // PDF pages, set when indexed
   scanned?: boolean; // PDF whose pages are mostly images without a text layer
+  indexFailed?: boolean; // text extraction threw; not retried automatically
 }
 
 export interface Progress {

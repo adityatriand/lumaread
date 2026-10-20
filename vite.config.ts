@@ -67,7 +67,13 @@ function vendorAssets(): Plugin {
         fs.createReadStream(file).pipe(res);
       });
     },
-    generateBundle() {
+    generateBundle(_, bundle) {
+      // Tauri picks MIME types by sniffing content (infer: "%PDF" anywhere in the first 1 KB = PDF);
+      // a script mislabelled that way fails to load in the app, so refuse to build one
+      for (const [name, out] of Object.entries(bundle)) {
+        const text = out.type === "chunk" ? out.code : typeof out.source === "string" ? out.source : "";
+        if (/\.(m?js|css|html)$/.test(name) && text.slice(0, 1024).includes("%PDF")) this.error(`${name} contains "%PDF" in its first 1 KB; Tauri would serve it as application/pdf`);
+      }
       for (const [url, file] of Object.entries(VENDOR_FILES)) {
         this.emitFile({ type: "asset", fileName: `vendor/${url}`, source: fs.readFileSync(file) });
       }

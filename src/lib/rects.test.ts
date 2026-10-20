@@ -56,3 +56,14 @@ describe("quoteIn", () => {
     expect(quoteIn("abc", "zzz")).toEqual({ exact: "zzz", prefix: "", suffix: "" });
   });
 });
+
+describe("iterateStream", () => {
+  it("yields every chunk and releases the reader", async () => {
+    const { iterateStream } = await import("./pdf");
+    const stream = new ReadableStream<number>({ start(c) { [1, 2, 3].forEach((n) => c.enqueue(n)); c.close(); } });
+    const seen: number[] = [];
+    for await (const n of iterateStream(stream)) seen.push(n);
+    expect(seen).toEqual([1, 2, 3]);
+    expect(stream.locked).toBe(false);
+  });
+});
