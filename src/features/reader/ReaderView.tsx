@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { deleteAnnotation, listAnnotations, saveAnnotation, type Annotation, type HighlightColor } from "../../lib/db";
 import { LookupPanel } from "../lookup/LookupPanel";
 import { ShareQuoteDialog } from "../share/ShareQuoteDialog";
+import { useReadingSession } from "../stats/useReadingSession";
 import { AnnotationEditor } from "../notebook/AnnotationEditor";
 import { citation } from "../notebook/citation";
 import { EpubReader } from "./EpubReader";
@@ -13,6 +14,7 @@ type Props = Omit<ReaderProps, "annotations" | "onSelect" | "onAnnotationClick" 
 
 export function ReaderView(props: Props) {
   const { doc } = props;
+  const session = useReadingSession(doc.id);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [selection, setSelection] = useState<TextSelection | null>(null);
   const [editing, setEditing] = useState<Annotation>();
@@ -67,6 +69,10 @@ export function ReaderView(props: Props) {
     <>
       <Reader
         {...props}
+        onLocation={(anchor, percent, label) => {
+          session.location(JSON.stringify(anchor), percent);
+          props.onLocation(anchor, percent, label);
+        }}
         annotations={annotations}
         onSelect={setSelection}
         onAnnotationClick={(id) => setEditing(annotations.find((a) => a.id === id))}

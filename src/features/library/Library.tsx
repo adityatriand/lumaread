@@ -9,11 +9,12 @@ interface Props {
   onOpen: (item: LibraryItem) => void;
   onRemove: (item: LibraryItem) => void;
   onImported: () => void;
+  onStats: (item: LibraryItem) => void;
 }
 
 const TABS: { label: string; format?: Format }[] = [{ label: "All" }, { label: "EPUB", format: "epub" }, { label: "PDF", format: "pdf" }];
 
-export function Library({ items, onOpen, onRemove, onImported }: Props) {
+export function Library({ items, onOpen, onRemove, onImported, onStats }: Props) {
   const [tab, setTab] = useState(0);
   const format = TABS[tab].format;
   const shown = format ? items.filter((i) => i.doc.format === format) : items;
@@ -38,7 +39,7 @@ export function Library({ items, onOpen, onRemove, onImported }: Props) {
       ) : (
         <ul className="doc-list card">
           {shown.map((item) => (
-            <DocRow key={item.doc.id} item={item} onOpen={() => onOpen(item)} onRemove={() => onRemove(item)} />
+            <DocRow key={item.doc.id} item={item} onOpen={() => onOpen(item)} onRemove={() => onRemove(item)} onStats={() => onStats(item)} />
           ))}
         </ul>
       )}

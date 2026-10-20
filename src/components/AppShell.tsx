@@ -1,13 +1,14 @@
-import { Highlighter, House, LibraryBig, Search, Settings } from "lucide-react";
+import { ChartColumn, Highlighter, House, LibraryBig, Search, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./Logo";
 
-export type View = "home" | "library" | "notebook" | "search" | "settings";
+export type View = "home" | "library" | "notebook" | "stats" | "search" | "settings";
 
 const NAV = [
   { view: "home", label: "Home", Icon: House },
   { view: "library", label: "Library", Icon: LibraryBig },
   { view: "notebook", label: "Highlights", Icon: Highlighter },
+  { view: "stats", label: "Stats", Icon: ChartColumn },
   { view: "search", label: "Search", Icon: Search },
   { view: "settings", label: "Settings", Icon: Settings },
 ] as const;

@@ -8,6 +8,7 @@ interface Props {
   onOpen: (item: LibraryItem) => void;
   onRemove: (item: LibraryItem) => void;
   onImported: () => void;
+  onStats: (item: LibraryItem) => void;
   onViewAll: () => void;
 }
 
@@ -15,7 +16,7 @@ function greeting(hour = new Date().getHours()) {
   return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 }
 
-export function HomePage({ items, onOpen, onRemove, onImported, onViewAll }: Props) {
+export function HomePage({ items, onOpen, onRemove, onImported, onStats, onViewAll }: Props) {
   const current = items.find((i) => i.doc.openedAt && i.progress && i.progress.percent < 1);
 
   return (
@@ -61,7 +62,7 @@ export function HomePage({ items, onOpen, onRemove, onImported, onViewAll }: Pro
             </div>
             <ul className="doc-list">
               {items.slice(0, 5).map((item) => (
-                <DocRow key={item.doc.id} item={item} onOpen={() => onOpen(item)} onRemove={() => onRemove(item)} />
+                <DocRow key={item.doc.id} item={item} onOpen={() => onOpen(item)} onRemove={() => onRemove(item)} onStats={() => onStats(item)} />
               ))}
             </ul>
           </section>

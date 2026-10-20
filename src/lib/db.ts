@@ -13,6 +13,7 @@ export interface DocMeta {
   openedAt?: number;
   cover?: string; // small JPEG data URL
   textIndexed?: boolean; // texts store holds every page/section
+  pageCount?: number; // PDF pages, set when indexed
   scanned?: boolean; // PDF whose pages are mostly images without a text layer
 }
 
@@ -50,6 +51,19 @@ export interface DocText {
   source: "text" | "ocr";
 }
 
+// One stretch of reading in one book; only time with recent activity on a visible window counts
+export interface Session {
+  id: string;
+  docId: string;
+  day: string; // local YYYY-MM-DD the session started
+  startedAt: number;
+  endedAt: number;
+  activeMs: number;
+  pages: number; // distinct pages (PDF) or screens (EPUB) seen
+  startPercent: number;
+  endPercent: number;
+}
+
 export interface OcrWord { text: string; box: Rect; line: number }
 export interface OcrPage { docId: string; page: number; words: OcrWord[] }
 
@@ -57,7 +71,7 @@ let dbPromise: Promise<IDBDatabase> | undefined;
 
 function openDb() {
   return (dbPromise ??= new Promise((resolve, reject) => {
-    const r = indexedDB.open("lumaread", 3);
+    const r = indexedDB.open("lumaread", 4);
     r.onupgradeneeded = (e) => {
       const db = r.result;
       if (e.oldVersion < 1) {
@@ -84,6 +98,9 @@ function openDb() {
         db.createObjectStore("annotations", { keyPath: "id" }).createIndex("docId", "docId");
         db.createObjectStore("texts", { keyPath: ["docId", "unit"] }).createIndex("docId", "docId");
         db.createObjectStore("ocr", { keyPath: ["docId", "page"] }).createIndex("docId", "docId");
+      }
+      if (e.oldVersion < 4) {
+        db.createObjectStore("sessions", { keyPath: "id" }).createIndex("docId", "docId");
       }
     };
     r.onsuccess = () => resolve(r.result);
@@ -136,6 +153,8 @@ export async function deleteAnnotation(id: string) {
 export const listTexts = (docId?: string) => getAll<DocText>("texts", docId);
 export const saveTexts = (texts: DocText[]) => putAll("texts", texts);
 export const saveOcrPage = (p: OcrPage) => putAll("ocr", [p]);
+export const listSessions = (docId?: string) => getAll<Session>("sessions", docId);
+export const saveSession = (s: Session) => putAll("sessions", [s]);
 export const listOcrPages = (docId: string) => getAll<OcrPage>("ocr", docId);
 
 export async function findByHash(hash: string): Promise<DocMeta | undefined> {
@@ -171,7 +190,7 @@ export async function saveProgress(p: Omit<Progress, "updatedAt" | "version">) {
   return done(t);
 }
 
-const DOC_STORES = ["docs", "files", "progress", "annotations", "texts", "ocr"];
+const DOC_STORES = ["docs", "files", "progress", "annotations", "texts", "ocr", "sessions"];
 
 // Removes the document and everything derived from it in one transaction
 export async function deleteDoc(id: string) {
@@ -179,7 +198,7 @@ export async function deleteDoc(id: string) {
   t.objectStore("docs").delete(id);
   t.objectStore("files").delete(id);
   t.objectStore("progress").delete(id);
-  for (const store of ["annotations", "texts", "ocr"]) {
+  for (const store of ["annotations", "texts", "ocr", "sessions"]) {
     t.objectStore(store).index("docId").openKeyCursor(IDBKeyRange.only(id)).onsuccess = (e) => {
       const cursor = (e.target as IDBRequest<IDBCursor | null>).result;
       if (!cursor) return;

@@ -9,6 +9,7 @@ import { NotebookPage } from "./features/notebook/NotebookPage";
 import { ReaderView } from "./features/reader/ReaderView";
 import { indexPending } from "./features/search/indexText";
 import { SearchPage } from "./features/search/SearchPage";
+import { StatsPage } from "./features/stats/StatsPage";
 import { loadPrefs, storePrefs, type ReadingPrefs } from "./features/settings/prefs";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import "@fontsource-variable/source-serif-4/wght.css";
@@ -23,6 +24,7 @@ export default function App() {
   const [prefs, setPrefs] = useState(loadPrefs);
   const [error, setError] = useState<string>();
   const [indexing, setIndexing] = useState(false);
+  const [statsDocId, setStatsDocId] = useState("");
   const openIdRef = useRef<string>(null);
 
   async function refresh() {
@@ -107,13 +109,15 @@ export default function App() {
     );
   }
 
-  const pageProps = { items, onOpen: (item: LibraryItem) => openDoc(item), onRemove: removeDoc, onImported: imported };
+  const showStats = (item: LibraryItem) => (setStatsDocId(item.doc.id), setView("stats"));
+  const pageProps = { items, onOpen: (item: LibraryItem) => openDoc(item), onRemove: removeDoc, onImported: imported, onStats: showStats };
   return (
     <AppShell view={view} onNavigate={setView}>
       {banner}
       {view === "home" && <HomePage {...pageProps} onViewAll={() => setView("library")} />}
       {view === "library" && <Library {...pageProps} />}
       {view === "notebook" && <NotebookPage items={items} onOpenAt={openDoc} />}
+      {view === "stats" && <StatsPage items={items} docId={statsDocId} onDocChange={setStatsDocId} onOpen={(item) => openDoc(item)} />}
       {view === "search" && <SearchPage items={items} indexing={indexing} onOpenAt={openDoc} />}
       {view === "settings" && <SettingsPage prefs={prefs} onChange={changePrefs} />}
     </AppShell>

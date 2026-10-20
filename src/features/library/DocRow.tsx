@@ -2,7 +2,7 @@ import { MoreHorizontal } from "lucide-react";
 import { formatSize, timeAgo } from "../../lib/format";
 import type { LibraryItem } from "./types";
 
-interface Props { item: LibraryItem; onOpen: () => void; onRemove: () => void }
+interface Props { item: LibraryItem; onOpen: () => void; onRemove: () => void; onStats?: () => void }
 
 export function Cover({ item, large }: { item: LibraryItem; large?: boolean }) {
   const { doc } = item;
@@ -21,7 +21,7 @@ export function ProgressBar({ percent }: { percent: number }) {
   );
 }
 
-export function DocRow({ item, onOpen, onRemove }: Props) {
+export function DocRow({ item, onOpen, onRemove, onStats }: Props) {
   const { doc, progress } = item;
   return (
     <li className="doc-row">
@@ -46,6 +46,7 @@ export function DocRow({ item, onOpen, onRemove }: Props) {
       <details className="menu">
         <summary aria-label={`More actions for ${doc.title}`}><MoreHorizontal size={18} /></summary>
         <div className="menu-items">
+          {onStats && <button className="menu-neutral" onClick={onStats}>Reading stats</button>}
           <button onClick={onRemove}>Remove from device</button>
         </div>
       </details>

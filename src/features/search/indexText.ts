@@ -53,7 +53,7 @@ export async function indexDoc(doc: DocMeta, bytes: ArrayBuffer) {
   const { texts, scannedPages } = doc.format === "pdf" ? await pdfTexts(doc, bytes) : { texts: await epubTexts(doc, bytes), scannedPages: 0 };
   await saveTexts(texts);
   const scanned = scannedPages > texts.length / 2;
-  await patchDoc(doc.id, { textIndexed: true, scanned });
+  await patchDoc(doc.id, { textIndexed: true, scanned, ...(doc.format === "pdf" && { pageCount: texts.length }) });
 }
 
 let running: Promise<void> | undefined;
