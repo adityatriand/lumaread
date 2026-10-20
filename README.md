@@ -8,6 +8,8 @@ Personal reading library: import EPUB/PDF, read, highlight, take notes, look up 
 - **Library**: Home (continue reading, recent files), Library (EPUB/PDF tabs), remove
 - **PDF reader** (pdf.js viewer): pages, zoom presets, selectable text; JBIG2/JPEG 2000 scans, CJK and non-embedded fonts render offline
 - **EPUB reader** (epub.js): chapters, font size, line spacing, light/dark/sepia, Source Serif 4, book scripts disabled
+- **Reading layouts**: desktop — continuous scroll or side by side (book spreads, cover alone); phone — scroll up–down or swipe left–right. Page colour Light / Sepia / Dark applies to EPUB and PDF
+- **App theme**: Light (default), Dark, or match the system — Settings → Appearance
 - **Progress** saved as a versioned anchor (`src/lib/anchor.ts`) and restored on reopen
 - **Highlights & notes**: 4 colours, notes on highlights or whole documents, copy quote with source; Notebook with jump-back
 - **Export** highlights and notes to Markdown / CSV through the system save dialog (CSV is formula-safe, UTF-8 BOM)
@@ -17,6 +19,7 @@ Personal reading library: import EPUB/PDF, read, highlight, take notes, look up 
 - **Translation** Indonesian ⇄ English with Mozilla's Bergamot models, entirely on-device
 - **Reading stats**: active reading time (only while the window is visible and you interacted in the last 2 minutes), pages read, last position, % complete, streaks, pace and time left — for all books or one, over 7/30/90 days, with charts and table views. Achievements share as story/square cards like quotes
 - **Share quote cards**: any selection or highlight becomes a 1080×1920 story or 1080×1080 square image (Luma / Paper / Night). Android opens the system share sheet (Instagram Stories, WhatsApp Status, …) via the local `src-tauri/plugins/quoteshare` plugin; desktop saves or copies the image
+- WebKit note: the macOS webview can't `for await` a ReadableStream, which pdf.js uses for text extraction; `src/lib/pdf.ts` polyfills it (without it, search indexing and scanned-PDF detection — and so OCR — silently fail in the app). The Vite build also refuses any script with `%PDF` in its first 1 KB, because Tauri would serve it as `application/pdf`
 - App-only: in a plain browser `src/main.tsx` shows only an "open the app" screen
 
 Everything — files, metadata, progress, highlights, OCR results — lives in the app webview's IndexedDB (`src/lib/db.ts`). Nothing leaves the device. Uninstalling the app deletes the library; export is the backup.
