@@ -1,0 +1,5 @@
+# All three only print funding notices on install
+allowBuilds:
+  core-js: false
+  es5-ext: false
+  tesseract.js: false

@@ -1,0 +1,41 @@
+{
+  "name": "lumaread",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "tauri": "tauri",
+    "test:e2e": "playwright test",
+    "setup:data": "node scripts/build-dictionaries.mjs && node scripts/fetch-translation-models.mjs"
+  },
+  "dependencies": {
+    "@browsermt/bergamot-translator": "0.4.9",
+    "@fontsource-variable/source-serif-4": "^5.3.1",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "~2.8.3",
+    "@tauri-apps/plugin-fs": "~2.7.1",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/ind": "^1.0.0",
+    "epubjs": "^0.3.93",
+    "lucide-react": "^1.59.0",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@tauri-apps/cli": "^2",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^5.0.5"
+  }
+}
