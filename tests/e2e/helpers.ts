@@ -81,4 +81,11 @@ export async function selectText(target: Page | Frame, selector: string, text: s
 }
 
 export const bookFrame = (page: Page): FrameLocator => page.frameLocator(".epub-view iframe");
+// Continuous EPUB layout shows several chapters (iframes) at once
 export { expect };
+
+// Saved settings take effect on load, like a returning user's
+export async function setPrefs(page: Page, prefs: Record<string, unknown>) {
+  await page.evaluate((p) => localStorage.setItem("reading-prefs", JSON.stringify({ ...JSON.parse(localStorage.getItem("reading-prefs") ?? "{}"), ...p })), prefs);
+  await page.reload();
+}

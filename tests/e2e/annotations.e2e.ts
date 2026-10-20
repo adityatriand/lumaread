@@ -1,4 +1,4 @@
-import { bookFrame, expect, idb, importAll, invokedCalls, row, selectText, test } from "./helpers";
+import { bookFrame, expect, idb, importAll, invokedCalls, row, selectText, test, setPrefs } from "./helpers";
 
 test("PDF: highlight a selection, keep it after reload, edit its note", async ({ page }) => {
   await importAll(page);
@@ -31,6 +31,7 @@ test("PDF: highlight a selection, keep it after reload, edit its note", async ({
 
 test("EPUB: highlight inside the book and jump back to it from the notebook", async ({ page }) => {
   await importAll(page);
+  await setPrefs(page, { layout: "spread" });
   await row(page, "Smoke Test Book").click();
   await page.getByLabel("Chapter").selectOption({ label: "Chapter Two" });
   await expect(bookFrame(page).locator("h1")).toHaveText("Chapter 2");

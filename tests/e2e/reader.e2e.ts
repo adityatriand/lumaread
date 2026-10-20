@@ -1,4 +1,4 @@
-import { bookFrame, expect, fixture, idb, importAll, row, test } from "./helpers";
+import { bookFrame, expect, fixture, idb, importAll, row, test, setPrefs } from "./helpers";
 
 test("a plain browser gets only the app-only screen", async ({ browser }) => {
   const web = await browser.newPage();
@@ -37,6 +37,7 @@ test("PDF: renders selectable text and restores page after reload", async ({ pag
 
 test("EPUB: blocks book scripts, navigates chapters, restores location and prefs", async ({ page }) => {
   await importAll(page);
+  await setPrefs(page, { layout: "spread" });
   await row(page, "Smoke Test Book").click();
   const book = bookFrame(page);
   await expect(book.locator("h1")).toHaveText("Chapter 1");
