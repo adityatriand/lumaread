@@ -7,7 +7,7 @@ import type { LibraryItem } from "../library/types";
 import { startAnchor } from "../reader/startAnchor";
 import { searchAll, type ResultKind, type SearchResult } from "./search";
 
-interface Props { items: LibraryItem[]; indexing: boolean; onOpenAt: (item: LibraryItem, at?: Anchor) => void }
+interface Props { items: LibraryItem[]; indexing: boolean; query: string; onQueryChange: (q: string) => void; onOpenAt: (item: LibraryItem, at?: Anchor) => void }
 
 const TABS: { kind?: ResultKind; label: string }[] = [
   { label: "All" },
@@ -23,8 +23,7 @@ function target(r: SearchResult): Anchor | undefined {
   return r.doc.format === "pdf" ? pdfAnchor(r.text.unit) : { v: 1, kind: "epub-section", href: r.text.href! };
 }
 
-export function SearchPage({ items, indexing, onOpenAt }: Props) {
-  const [query, setQuery] = useState("");
+export function SearchPage({ items, indexing, query, onQueryChange: setQuery, onOpenAt }: Props) {
   const [tab, setTab] = useState(0);
   const [corpus, setCorpus] = useState<{ texts: DocText[]; annotations: Annotation[] }>({ texts: [], annotations: [] });
   const deferred = useDeferredValue(query);
@@ -41,7 +40,8 @@ export function SearchPage({ items, indexing, onOpenAt }: Props) {
 
   return (
     <div className="screen">
-      <label className="search-box">
+      {/* Desktop searches from the top bar; this box is the phone's */}
+      <label className="search-box page-search">
         <Search size={18} aria-hidden="true" />
         <input type="search" placeholder="Search titles, book text, highlights and notes" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus aria-label="Search" />
         {query && <button className="icon-button" aria-label="Clear search" onClick={() => setQuery("")}><X size={18} /></button>}

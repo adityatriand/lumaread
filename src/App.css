@@ -11,6 +11,7 @@
   --danger: #b42318;
   --shadow: 0 1px 2px rgb(20 20 50 / 0.04), 0 4px 16px rgb(20 20 50 / 0.04);
   --radius: 14px;
+  color-scheme: light; /* native controls (radios, selects, scrollbars) match the light default */
   /* Chart tokens: validated (dataviz lightness band + 3:1 contrast) against each surface */
   --chart: #5b5bd6;
   --chart-track: #e6e6fa;
@@ -23,8 +24,27 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Light is the default; Dark is chosen in Settings → Appearance, or follows macOS/Android with "System".
+   Tokens repeat because light-dark() needs Safari 17.5 and the app supports macOS 13.3. */
+:root[data-theme="dark"] {
+  --bg: #121218;
+  --surface: #1b1b24;
+  --surface-2: #24242f;
+  --text: #ececf3;
+  --muted: #9a9ab0;
+  --border: #2c2c38;
+  --accent: #8b8bf0;
+  --accent-soft: #2a2a4a;
+  --on-accent: #121218;
+  --danger: #f97066;
+  --shadow: none;
+  --chart: #7c7cec;
+  --chart-track: #2b2b47;
+  --grid: #2a2a36;
+  color-scheme: dark;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-theme="system"] {
     --bg: #121218;
     --surface: #1b1b24;
     --surface-2: #24242f;
@@ -39,9 +59,13 @@
     --chart: #7c7cec;
     --chart-track: #2b2b47;
     --grid: #2a2a36;
+    color-scheme: dark;
   }
-  /* No dark logo supplied: invert lightness, keep the purple hue */
-  .logo { filter: invert(1) hue-rotate(180deg); }
+}
+/* No dark logo supplied: invert lightness, keep the purple hue */
+:root[data-theme="dark"] .logo { filter: invert(1) hue-rotate(180deg); }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .logo { filter: invert(1) hue-rotate(180deg); }
 }
 
 * { box-sizing: border-box; }
@@ -84,6 +108,13 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .shell-main { overflow: auto; min-width: 0; }
 .tabbar { display: none; }
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; padding: 12px 24px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.top-search { width: min(520px, 100%); }
+.top-search input { min-height: 38px; }
+.top-search kbd { font: inherit; font-size: 0.72rem; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; }
+.page-search { display: none; }
+.more-sheet { position: fixed; left: 8px; right: 8px; bottom: calc(68px + env(safe-area-inset-bottom)); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 8px; display: grid; gap: 2px; box-shadow: 0 8px 32px rgb(20 20 50 / 0.18); }
+.sheet-backdrop { place-items: end stretch; background: rgb(10 10 20 / 0.2); }
 
 /* Pages */
 /* not ".page": pdf.js uses that class for its page boxes */
@@ -139,7 +170,7 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 
 /* Reading preferences */
 .prefs { display: grid; gap: 16px; }
-.prefs fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.prefs fieldset, fieldset.prefs { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
 .prefs legend { font-size: 0.85rem; color: var(--muted); padding: 0; margin-bottom: 8px; }
 .segmented { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; width: fit-content; }
 .segmented > * { min-width: 64px; text-align: center; }
@@ -277,6 +308,28 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .data-table caption { text-align: left; color: var(--muted); padding-bottom: 6px; }
 .data-table th, .data-table td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
 
+
+/* Settings */
+.settings { display: grid; grid-template-columns: 200px 1fr; padding: 0; overflow: hidden; }
+.settings-nav { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-right: 1px solid var(--border); background: var(--surface-2); }
+.settings-body { padding: 20px 24px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.settings-body h2 { margin: 0; }
+.segmented.wide > * { min-width: 0; padding: 6px 14px; display: inline-flex; gap: 6px; align-items: center; }
+.swatch.app-light { background: #f7f7fb; }
+.swatch.app-dark { background: #1b1b24; }
+.swatch.app-system { background: linear-gradient(135deg, #f7f7fb 50%, #1b1b24 50%); }
+@media (max-width: 760px) {
+  .settings { grid-template-columns: 1fr; }
+  .settings-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); scrollbar-width: none; }
+  .settings-nav .nav-item { flex: none; }
+}
+
+/* PDF page colour: canvases can't take a text colour, so tint (sepia) or invert (dark, hue kept so images look natural) */
+.reader.theme-sepia .pdfViewer .canvasWrapper canvas { filter: sepia(0.35) saturate(1.1) brightness(0.97); }
+.reader.theme-dark .pdfViewer .canvasWrapper canvas { filter: invert(0.9) hue-rotate(180deg); }
+.reader.theme-dark .pdfViewer .page { background: #16161d; }
+.reader.theme-dark .hl { mix-blend-mode: screen; opacity: 0.45; }
+
 /* Search */
 .search-box { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0 8px 0 14px; color: var(--muted); }
 .search-box input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: none; border: 0; outline: 0; min-height: 48px; }
@@ -293,7 +346,9 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
   .tabbar { display: flex; justify-content: space-around; background: var(--surface); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); }
   .tabbar .nav-item { flex-direction: column; gap: 2px; font-size: 0.65rem; background: none; padding: 6px 4px; min-width: 0; flex: 1; }
   .hero-figure { font-size: 2.6rem; }
-  .mobile-brand { display: block; padding: 12px 16px 0; padding-top: max(12px, env(safe-area-inset-top)); }
+  .topbar { display: none; }
+  .page-search { display: flex; }
+  .mobile-brand { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0; padding-top: max(12px, env(safe-area-inset-top)); }
   .mobile-brand .logo { height: 40px; margin: 0 0 0 -4px; }
   .screen { padding: 16px; }
   .button.import { border-radius: 50%; width: 44px; height: 44px; padding: 0; justify-content: center; }

@@ -10,13 +10,13 @@ import { ShareQuoteDialog } from "../share/ShareQuoteDialog";
 import { AnnotationEditor } from "./AnnotationEditor";
 import { toCsv, toMarkdown, type ExportRow } from "./exportNotes";
 
-interface Props { items: LibraryItem[]; onOpenAt: (item: LibraryItem, at?: Anchor) => void }
+interface Props { items: LibraryItem[]; initialTab?: Tab; onOpenAt: (item: LibraryItem, at?: Anchor) => void }
 
 type Tab = "highlights" | "notes";
 
-export function NotebookPage({ items, onOpenAt }: Props) {
+export function NotebookPage({ items, initialTab = "highlights", onOpenAt }: Props) {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  const [tab, setTab] = useState<Tab>("highlights");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [docId, setDocId] = useState("");
   const [editing, setEditing] = useState<Annotation>();
   const [message, setMessage] = useState<string>();

@@ -10,7 +10,7 @@ import { ReaderView } from "./features/reader/ReaderView";
 import { indexPending } from "./features/search/indexText";
 import { SearchPage } from "./features/search/SearchPage";
 import { StatsPage } from "./features/stats/StatsPage";
-import { loadPrefs, storePrefs, type ReadingPrefs } from "./features/settings/prefs";
+import { applyAppTheme, loadPrefs, storePrefs, type ReadingPrefs } from "./features/settings/prefs";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import "@fontsource-variable/source-serif-4/wght.css";
 import "./App.css";
@@ -25,6 +25,7 @@ export default function App() {
   const [error, setError] = useState<string>();
   const [indexing, setIndexing] = useState(false);
   const [statsDocId, setStatsDocId] = useState("");
+  const [query, setQuery] = useState("");
   const openIdRef = useRef<string>(null);
 
   async function refresh() {
@@ -85,6 +86,7 @@ export default function App() {
   function changePrefs(p: ReadingPrefs) {
     setPrefs(p);
     storePrefs(p);
+    applyAppTheme(p.appTheme);
   }
 
   function close() {
@@ -112,13 +114,13 @@ export default function App() {
   const showStats = (item: LibraryItem) => (setStatsDocId(item.doc.id), setView("stats"));
   const pageProps = { items, onOpen: (item: LibraryItem) => openDoc(item), onRemove: removeDoc, onImported: imported, onStats: showStats };
   return (
-    <AppShell view={view} onNavigate={setView}>
+    <AppShell view={view} query={query} onNavigate={setView} onSearch={(q) => (setQuery(q), q && setView("search"))}>
       {banner}
       {view === "home" && <HomePage {...pageProps} onViewAll={() => setView("library")} />}
       {view === "library" && <Library {...pageProps} />}
-      {view === "notebook" && <NotebookPage items={items} onOpenAt={openDoc} />}
+      {(view === "notebook" || view === "notes") && <NotebookPage key={view} items={items} initialTab={view === "notes" ? "notes" : "highlights"} onOpenAt={openDoc} />}
       {view === "stats" && <StatsPage items={items} docId={statsDocId} onDocChange={setStatsDocId} onOpen={(item) => openDoc(item)} />}
-      {view === "search" && <SearchPage items={items} indexing={indexing} onOpenAt={openDoc} />}
+      {view === "search" && <SearchPage items={items} indexing={indexing} query={query} onQueryChange={setQuery} onOpenAt={openDoc} />}
       {view === "settings" && <SettingsPage prefs={prefs} onChange={changePrefs} />}
     </AppShell>
   );

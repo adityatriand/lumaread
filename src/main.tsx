@@ -6,6 +6,8 @@ const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement)
 
 // LumaRead is app-only (macOS / Android); in a plain browser the library code is never loaded
 if (isTauri()) {
+  // Before the first paint, so a dark-theme user never sees a light flash
+  import("./features/settings/prefs").then(({ applyAppTheme, loadPrefs }) => applyAppTheme(loadPrefs().appTheme));
   import("./App").then(({ default: App }) =>
     root.render(
       <React.StrictMode>
