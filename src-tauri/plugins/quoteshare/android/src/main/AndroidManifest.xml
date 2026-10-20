@@ -3,7 +3,7 @@
     <application>
         <!-- Lets the receiving app read the card through a temporary content:// grant; no storage permission needed -->
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name="com.lumaread.quoteshare.QuoteShareFileProvider"
             android:authorities="${applicationId}.quoteshare.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
