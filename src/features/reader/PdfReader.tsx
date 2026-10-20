@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import "pdfjs-dist/web/pdf_viewer.css";
 import { pdfAnchor, pdfPage, quoteIn, type RangeAnchor } from "../../lib/anchor";
 import type { Annotation } from "../../lib/db";
@@ -6,6 +6,7 @@ import { openPdf } from "../../lib/pdf";
 import { containsPoint, mergeRects, normalizeRects } from "../../lib/rects";
 import { paintOcrLayer } from "../ocr/ocrLayer";
 import { useOcr, type OcrStatus } from "../ocr/useOcr";
+import { effectiveLayout, type Layout } from "../settings/prefs";
 import { pageOverlay } from "./pageOverlay";
 import { ReaderChrome } from "./ReaderChrome";
 import type { ReaderProps } from "./types";
@@ -43,7 +44,22 @@ function paintHighlights(viewer: Viewer, page: number, annotations: Annotation[]
   }
 }
 
-export function PdfReader({ doc, bytes, initial, annotations, tools, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
+type ViewerModule = typeof import("pdfjs-dist/web/pdf_viewer.mjs");
+
+// Side by side uses "even" spreads: page 1 (the cover) alone, then 2|3, 4|5 like a printed book
+function applyLayout(viewer: Viewer, { ScrollMode, SpreadMode }: ViewerModule, layout: Layout) {
+  viewer.scrollMode = layout === "spread" ? ScrollMode.PAGE : layout === "horizontal" ? ScrollMode.HORIZONTAL : ScrollMode.VERTICAL;
+  viewer.spreadMode = layout === "spread" ? SpreadMode.EVEN : SpreadMode.NONE;
+  const fit = layout === "continuous" ? "page-width" : "page-fit";
+  viewer.currentScaleValue = fit;
+  return fit;
+}
+
+export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
+  const layout = effectiveLayout(prefs.layout);
+  const layoutRef = useRef(layout);
+  const viewerModule = useRef<ViewerModule>(null);
+  layoutRef.current = layout;
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Viewer>(null);
   const annotationsRef = useRef(annotations);
@@ -67,7 +83,9 @@ export function PdfReader({ doc, bytes, initial, annotations, tools, onLocation,
 
     (async () => {
       // Dynamic so it evaluates after lib/pdf has set globalThis.pdfjsLib
-      const { PDFViewer, EventBus, PDFLinkService } = await import("pdfjs-dist/web/pdf_viewer.mjs");
+      const mod = await import("pdfjs-dist/web/pdf_viewer.mjs");
+      const { PDFViewer, EventBus, PDFLinkService } = mod;
+      viewerModule.current = mod;
       const pdf = await task.promise;
       if (cancelled) return;
 
@@ -76,7 +94,7 @@ export function PdfReader({ doc, bytes, initial, annotations, tools, onLocation,
       const viewer = new PDFViewer({ container: containerRef.current!, eventBus, linkService });
       linkService.setViewer(viewer);
       eventBus.on("pagesinit", () => {
-        viewer.currentScaleValue = "page-width";
+        setZoom(applyLayout(viewer, mod, layoutRef.current));
         viewer.currentPageNumber = pdfPage(initial) ?? 1;
         // pagechanging doesn't fire when the start page is already page 1, so report it here
         setPage(viewer.currentPageNumber);
@@ -158,15 +176,28 @@ export function PdfReader({ doc, bytes, initial, annotations, tools, onLocation,
     if (hit) onAnnotationClick(hit.id);
   }
 
-  const go = (n: number) => viewerRef.current && (viewerRef.current.currentPageNumber = Math.min(Math.max(n, 1), pages));
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (viewer && viewerModule.current) setZoom(applyLayout(viewer, viewerModule.current, layout));
+  }, [layout]);
+
+  // nextPage/previousPage step a whole spread in side-by-side mode
+  const next = () => viewerRef.current?.nextPage();
+  const prev = () => viewerRef.current?.previousPage();
+  function handleKey(e: KeyboardEvent) {
+    if (e.key === "ArrowRight" || e.key === "PageDown") (e.preventDefault(), next());
+    if (e.key === "ArrowLeft" || e.key === "PageUp") (e.preventDefault(), prev());
+  }
 
   return (
     <ReaderChrome
       title={doc.title}
       location={pages ? `Page ${page} / ${pages}` : "Loading…"}
       onClose={onClose}
-      onPrev={() => go(page - 1)}
-      onNext={() => go(page + 1)}
+      onPrev={prev}
+      onNext={next}
+      theme={prefs.theme}
+      prefs={{ value: prefs, onChange: onPrefsChange, format: "pdf" }}
       canPrev={page > 1}
       canNext={page < pages}
       tools={
@@ -189,7 +220,7 @@ export function PdfReader({ doc, bytes, initial, annotations, tools, onLocation,
       {error ? (
         <p className="alert" role="alert">{error}</p>
       ) : (
-        <div ref={containerRef} className="pdf-container" tabIndex={0} onClick={handleClick}>
+        <div ref={containerRef} className={`pdf-container layout-${layout}`} tabIndex={0} onClick={handleClick} onKeyDown={handleKey}>
           <div className="pdfViewer" />
         </div>
       )}

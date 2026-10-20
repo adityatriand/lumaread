@@ -12,7 +12,7 @@ interface Props {
   canPrev?: boolean;
   canNext?: boolean;
   tools?: ReactNode;
-  prefs?: { value: ReadingPrefs; onChange: (p: ReadingPrefs) => void };
+  prefs?: { value: ReadingPrefs; onChange: (p: ReadingPrefs) => void; format?: "pdf" | "epub" };
   theme?: string;
   children: ReactNode;
 }
@@ -37,7 +37,7 @@ export function ReaderChrome({ title, location, onClose, onPrev, onNext, canPrev
       </header>
       {prefs && showPrefs && (
         <div className="popover" role="dialog" aria-label="Reading preferences">
-          <ReadingPrefsForm prefs={prefs.value} onChange={prefs.onChange} />
+          <ReadingPrefsForm prefs={prefs.value} onChange={prefs.onChange} format={prefs.format} />
         </div>
       )}
       <div className="reader-body">{children}</div>

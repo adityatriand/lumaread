@@ -3,7 +3,7 @@ import ePub, { type Contents, type NavItem, type Rendition } from "epubjs";
 import { useEffect, useRef, useState } from "react";
 import { epubAnchor, epubTarget, quoteIn } from "../../lib/anchor";
 import type { HighlightColor } from "../../lib/db";
-import { LINE_HEIGHTS, THEMES, type ReadingPrefs } from "../settings/prefs";
+import { LINE_HEIGHTS, THEMES, effectiveLayout, type Layout, type ReadingPrefs } from "../settings/prefs";
 import { ReaderChrome } from "./ReaderChrome";
 import type { ReaderProps } from "./types";
 
@@ -11,6 +11,13 @@ import type { ReaderProps } from "./types";
 const FONT_FACE = `@font-face{font-family:"Source Serif 4 Variable";font-weight:200 900;src:url(${new URL(serifFont, location.href)}) format("woff2")}`;
 
 const HL_FILL: Record<HighlightColor, string> = { yellow: "#facc15", green: "#4ade80", blue: "#60a5fa", pink: "#f472b6" };
+
+// epub.js has no in-place switch between scrolled and paginated, so each layout gets its own rendition
+const RENDITION: Record<Layout, object> = {
+  continuous: { flow: "scrolled", manager: "continuous" },
+  spread: { flow: "paginated", spread: "always", minSpreadWidth: 0 },
+  horizontal: { flow: "paginated", spread: "none" },
+};
 
 function applyPrefs(rendition: Rendition, p: ReadingPrefs) {
   rendition.themes.select(p.theme);
@@ -24,6 +31,9 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
   const renditionRef = useRef<Rendition>(null);
   const drawnRef = useRef(new Map<string, string>()); // annotation id → cfiRange|color currently drawn
   const clickRef = useRef(onAnnotationClick);
+  const layout = effectiveLayout(prefs.layout);
+  const lastCfi = useRef<string>(undefined); // where to reopen after a layout switch
+  const [renditionId, setRenditionId] = useState(0);
   const [toc, setToc] = useState<NavItem[]>([]);
   const [label, setLabel] = useState("Loading…");
   const labelRef = useRef("");
@@ -34,8 +44,9 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
   useEffect(() => {
     const book = ePub(bytes.slice(0));
     // Book scripts stay disabled: EPUB content is untrusted
-    const rendition = book.renderTo(viewRef.current!, { width: "100%", height: "100%", flow: "paginated", allowScriptedContent: false });
+    const rendition = book.renderTo(viewRef.current!, { width: "100%", height: "100%", ...RENDITION[layout], allowScriptedContent: false });
     renditionRef.current = rendition;
+    setRenditionId((n) => n + 1);
     drawnRef.current.clear();
     for (const [name, { background, color }] of Object.entries(THEMES)) rendition.themes.register(name, { body: { background, color } });
     rendition.hooks.content.register((contents: Contents) => {
@@ -51,6 +62,7 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
     rendition.on("relocated", (loc: { start: { cfi: string; href: string; index: number } }) => {
       const chapter = book.navigation?.get(loc.start.href)?.label.trim() || `Section ${loc.start.index + 1}`;
       setLabel(chapter);
+      lastCfi.current = loc.start.cfi;
       labelRef.current = chapter;
       // shortcut: percent by section, not exact; switch to book.locations.generate() if users need precision
       onLocation(epubAnchor(loc.start.cfi), (loc.start.index + 1) / (book.spine.last().index + 1), chapter);
@@ -79,15 +91,15 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
     window.addEventListener("keyup", onKey);
 
     book.loaded.navigation.then((nav) => setToc(nav.toc));
-    rendition.display(epubTarget(initial)).catch(() => setError("This EPUB could not be displayed."));
+    rendition.display(lastCfi.current ?? epubTarget(initial)).catch(() => setError("This EPUB could not be displayed."));
 
     return () => {
       window.removeEventListener("keyup", onKey);
       renditionRef.current = null;
       book.destroy();
     };
-    // Reload only when a different document is opened
-  }, [doc.id]);
+    // Rebuild only for a different document or layout
+  }, [doc.id, layout]);
 
   useEffect(() => {
     if (renditionRef.current) applyPrefs(renditionRef.current, prefs);
@@ -112,7 +124,8 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
       rendition.annotations.highlight(cfiRange, { id }, () => clickRef.current(id), "hl", { fill: HL_FILL[color], "fill-opacity": "0.35", "mix-blend-mode": "multiply" });
       drawn.set(id, key);
     }
-  }, [annotations]);
+    // A new rendition (layout switch) starts with no highlights drawn
+  }, [annotations, renditionId]);
 
   return (
     <ReaderChrome
