@@ -39,7 +39,7 @@ test("EPUB: highlight inside the book and jump back to it from the notebook", as
   const frame = page.frames().find((f) => f.url() === "about:srcdoc" || f !== page.mainFrame())!;
   await selectText(frame, "body", "Chapter 2 paragraph 3");
   await page.getByRole("button", { name: "Highlight pink" }).click();
-  await expect(page.locator(".epub-view svg g.hl")).toHaveCount(1);
+  await expect(page.locator(".book-view svg g.hl")).toHaveCount(1);
   const [saved] = await idb<{ label: string; anchor: { cfiRange: string } }>(page, "annotations");
   expect(saved.label).toBe("Chapter Two");
   expect(saved.anchor.cfiRange).toMatch(/^epubcfi\(/);
@@ -49,7 +49,7 @@ test("EPUB: highlight inside the book and jump back to it from the notebook", as
   await expect(page.locator(".note-card")).toContainText("Chapter 2 paragraph 3");
   await page.locator(".note-open").click();
   await expect(bookFrame(page).locator("h1")).toHaveText("Chapter 2");
-  await expect(page.locator(".epub-view svg g.hl")).toHaveCount(1);
+  await expect(page.locator(".book-view svg g.hl")).toHaveCount(1);
 });
 
 test("notebook exports Markdown and CSV through the save dialog", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { bookFrame, expect, importAll, row, setPrefs, test } from "./helpers";
+import { bookFrame, expect, fixture, importAll, row, setPrefs, test } from "./helpers";
 
 test("app theme defaults to light; Dark is chosen in Settings and remembered", async ({ page }) => {
   const html = page.locator("html");
@@ -41,7 +41,9 @@ test("EPUB continuous layout scrolls through chapters", async ({ page }) => {
   await importAll(page);
   await row(page, "Smoke Test Book").click();
   await expect(bookFrame(page).first().locator("h1")).toHaveText("Chapter 1");
-  const scroller = page.locator(".epub-view .epub-container");
+  // The text must actually be on screen: a 0-width chapter frame once hid every continuous-mode book
+  await expect.poll(async () => (await page.locator(".book-view iframe").first().boundingBox())?.width ?? 0).toBeGreaterThan(300);
+  const scroller = page.locator(".book-view .epub-container");
   await expect.poll(() => scroller.evaluate((el) => el.scrollHeight > el.clientHeight * 2)).toBe(true);
   // Scroll like a reader does (several wheel steps): epub.js swallows the first scroll after it positions the book
   await scroller.hover();
@@ -49,5 +51,14 @@ test("EPUB continuous layout scrolls through chapters", async ({ page }) => {
     await page.mouse.wheel(0, 600);
     await expect(page.locator(".reader-heading")).toContainText("Chapter Two", { timeout: 500 });
   }).toPass({ timeout: 15_000 });
-  await expect(page.locator(".epub-view iframe")).toHaveCount(2);
+  await expect(page.locator(".book-view iframe")).toHaveCount(2);
+});
+
+test("EPUB continuous: a short first section (cover) still lets the next chapter load", async ({ page }) => {
+  await page.setInputFiles("input[type=file]", fixture("Short Start.epub"));
+  await row(page, "Short Start").click();
+  // Without topping up, only the one-line cover loads and there is nothing to scroll
+  await expect(page.locator(".book-view iframe")).toHaveCount(2);
+  const scroller = page.locator(".book-view .epub-container");
+  await expect.poll(() => scroller.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
 });

@@ -80,7 +80,7 @@ export async function selectText(target: Page | Frame, selector: string, text: s
   );
 }
 
-export const bookFrame = (page: Page): FrameLocator => page.frameLocator(".epub-view iframe");
+export const bookFrame = (page: Page): FrameLocator => page.frameLocator(".book-view iframe");
 // Continuous EPUB layout shows several chapters (iframes) at once
 export { expect };
 
