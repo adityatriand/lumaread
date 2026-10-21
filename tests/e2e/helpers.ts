@@ -10,10 +10,13 @@ export interface Invoked { cmd: string; args: unknown; headers?: Record<string, 
 export const test = base.extend<{ app: void }>({
   app: [async ({ page }, use) => {
     const problems: string[] = [];
-    page.on("pageerror", (e) => problems.push(e.message));
+    page.on("pageerror", (e) => !e.message.includes("Importing a module script failed") && problems.push(e.message));
     page.on("console", (m) => {
-      // The fixture EPUB's own script being blocked is the expected outcome
-      if (m.type() === "error" && !m.text().includes("Blocked script execution") && !m.text().includes("404")) problems.push(m.text());
+      // The fixture EPUB's own script being blocked (by sandbox or CSP) is the expected outcome
+      const bookScriptBlocked = /Blocked script execution|inline script violates the following Content Security Policy|Refused to execute a script because its hash/.test(m.text());
+      // WebKit logs a lazy module import cancelled by a reload/navigation as an error; Chrome stays silent
+      const importCancelled = m.text().includes("Importing a module script failed");
+      if (m.type() === "error" && !bookScriptBlocked && !importCancelled && !m.text().includes("404")) problems.push(m.text());
     });
     await page.addInitScript(() => {
       const calls: unknown[] = [];

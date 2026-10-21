@@ -1,5 +1,5 @@
 import type { Frame, Page } from "@playwright/test";
-import { choose, expect, fixture, row, selectText, setPrefs, test } from "./helpers";
+import { choose, expect, fixture, idb, row, selectText, setPrefs, test } from "./helpers";
 
 // Nav document in a subfolder (text/nav.xhtml), links relative to it — epub.js alone fails with "No Section Found"
 const bookFrameWith = async (page: Page, text: string): Promise<Frame> => {
@@ -49,3 +49,13 @@ for (const layout of ["continuous", "spread"]) {
     }
   });
 }
+
+test("EPUB shows stable page numbers, counted once and reused", async ({ page }) => {
+  await page.setInputFiles("input[type=file]", fixture("Nested Nav.epub"));
+  await row(page, "Nested Nav").click();
+  await expect(page.locator(".reader-heading")).toContainText(/Contents · Page 1 \/ \d+/);
+  await choose(page, "Chapter", "Chapter Two: Middle");
+  await expect(page.locator(".reader-heading")).toContainText(/Chapter Two: Middle · Page \d+ \/ \d+/);
+  // Counted pages are stored with the book, so the next open doesn't recount
+  await expect.poll(async () => !!(await idb<{ epubLocations?: string }>(page, "docs"))[0]?.epubLocations).toBe(true);
+});
