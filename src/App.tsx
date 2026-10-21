@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppShell, type View } from "./components/AppShell";
 import type { Anchor } from "./lib/anchor";
 import { deleteDoc, getFile, getProgress, listDocs, listProgress, patchDoc, saveProgress, type DocMeta } from "./lib/db";
+import { EditDetailsDialog } from "./features/library/EditDetailsDialog";
 import { HomePage } from "./features/library/HomePage";
 import { Library } from "./features/library/Library";
 import type { LibraryItem } from "./features/library/types";
@@ -26,6 +27,7 @@ export default function App() {
   const [indexing, setIndexing] = useState(false);
   const [statsDocId, setStatsDocId] = useState("");
   const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState<DocMeta>();
   const openIdRef = useRef<string>(null);
 
   async function refresh() {
@@ -112,7 +114,7 @@ export default function App() {
   }
 
   const showStats = (item: LibraryItem) => (setStatsDocId(item.doc.id), setView("stats"));
-  const pageProps = { items, onOpen: (item: LibraryItem) => openDoc(item), onRemove: removeDoc, onImported: imported, onStats: showStats };
+  const pageProps = { items, onOpen: (item: LibraryItem) => openDoc(item), onRemove: removeDoc, onImported: imported, onStats: showStats, onEdit: (item: LibraryItem) => setEditing(item.doc) };
   return (
     <AppShell view={view} query={query} onNavigate={setView} onSearch={(q) => (setQuery(q), q && setView("search"))}>
       {banner}
@@ -122,6 +124,13 @@ export default function App() {
       {view === "stats" && <StatsPage items={items} docId={statsDocId} onDocChange={setStatsDocId} onOpen={(item) => openDoc(item)} />}
       {view === "search" && <SearchPage items={items} indexing={indexing} query={query} onQueryChange={setQuery} onOpenAt={openDoc} />}
       {view === "settings" && <SettingsPage prefs={prefs} onChange={changePrefs} />}
+      {editing && (
+        <EditDetailsDialog
+          doc={editing}
+          onSave={(patch) => patchDoc(editing.id, patch).then(refresh, () => setError("Could not save the details."))}
+          onClose={() => setEditing(undefined)}
+        />
+      )}
     </AppShell>
   );
 }

@@ -6,6 +6,7 @@ import { timeAgo } from "../../lib/format";
 import { saveTextFile } from "../../lib/saveFile";
 import type { LibraryItem } from "../library/types";
 import { startAnchor } from "../reader/startAnchor";
+import { Select } from "../../components/Select";
 import { ShareQuoteDialog } from "../share/ShareQuoteDialog";
 import { AnnotationEditor } from "./AnnotationEditor";
 import { toCsv, toMarkdown, type ExportRow } from "./exportNotes";
@@ -13,6 +14,8 @@ import { toCsv, toMarkdown, type ExportRow } from "./exportNotes";
 interface Props { items: LibraryItem[]; initialTab?: Tab; onOpenAt: (item: LibraryItem, at?: Anchor) => void }
 
 type Tab = "highlights" | "notes";
+
+const closeMenu = (e: { currentTarget: Element }) => e.currentTarget.closest("details")?.removeAttribute("open");
 
 export function NotebookPage({ items, initialTab = "highlights", onOpenAt }: Props) {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -60,10 +63,17 @@ export function NotebookPage({ items, initialTab = "highlights", onOpenAt }: Pro
     <div className="screen">
       <header className="page-header">
         <h1>Highlights &amp; Notes</h1>
-        <div className="header-actions">
-          <button className="button" onClick={() => exportAs("md")} disabled={!inScope.length}><Download size={16} /> Markdown</button>
-          <button className="button" onClick={() => exportAs("csv")} disabled={!inScope.length}><Download size={16} /> CSV</button>
-        </div>
+        <details className="menu export-menu">
+          <summary className={`button${inScope.length ? "" : " disabled"}`} aria-disabled={!inScope.length}>
+            <Download size={16} aria-hidden="true" /> Export
+          </summary>
+          {inScope.length > 0 && (
+            <div className="menu-items">
+              <button className="menu-neutral" onClick={(e) => (closeMenu(e), exportAs("md"))}>Markdown (.md)</button>
+              <button className="menu-neutral" onClick={(e) => (closeMenu(e), exportAs("csv"))}>Spreadsheet (.csv)</button>
+            </div>
+          )}
+        </details>
       </header>
 
       <div className="toolbar-row">
@@ -74,10 +84,13 @@ export function NotebookPage({ items, initialTab = "highlights", onOpenAt }: Pro
             </button>
           ))}
         </div>
-        <select aria-label="Document" value={docId} onChange={(e) => setDocId(e.target.value)}>
-          <option value="">All documents</option>
-          {items.map((i) => <option key={i.doc.id} value={i.doc.id}>{i.doc.title}</option>)}
-        </select>
+        <Select
+          label="Document"
+          className="doc-filter"
+          value={docId}
+          options={[{ value: "", label: "All documents" }, ...items.map((i) => ({ value: i.doc.id, label: i.doc.title }))]}
+          onChange={setDocId}
+        />
       </div>
 
       {shown.length === 0 ? (

@@ -4,6 +4,7 @@ import { listSessions, type Session } from "../../lib/db";
 import { timeAgo } from "../../lib/format";
 import { ProgressBar } from "../library/DocRow";
 import type { LibraryItem } from "../library/types";
+import { Select } from "../../components/Select";
 import { ShareImageDialog } from "../share/ShareImageDialog";
 import { achievementCaption, renderAchievement, type Achievement } from "./achievementCard";
 import { BarList, ColumnChart, DataTable } from "./charts";
@@ -68,10 +69,13 @@ export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
       </header>
 
       <div className="filter-row">
-        <select aria-label="Book" value={docId} onChange={(e) => onDocChange(e.target.value)}>
-          <option value="">All books</option>
-          {items.map((i) => <option key={i.doc.id} value={i.doc.id}>{i.doc.title}</option>)}
-        </select>
+        <Select
+          label="Book"
+          className="doc-filter"
+          value={docId}
+          options={[{ value: "", label: "All books" }, ...items.map((i) => ({ value: i.doc.id, label: i.doc.title }))]}
+          onChange={onDocChange}
+        />
         <div className="segmented" role="radiogroup" aria-label="Period">
           {RANGES.map((r) => (
             <button key={r} role="radio" aria-checked={range === r} aria-pressed={range === r} onClick={() => setRange(r)}>{r} days</button>

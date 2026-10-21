@@ -12,6 +12,7 @@
   --shadow: 0 1px 2px rgb(20 20 50 / 0.04), 0 4px 16px rgb(20 20 50 / 0.04);
   --radius: 14px;
   color-scheme: light; /* native controls (radios, selects, scrollbars) match the light default */
+  --frame: #ececf3; /* behind the floating panels */
   /* Chart tokens: validated (dataviz lightness band + 3:1 contrast) against each surface */
   --chart: #5b5bd6;
   --chart-track: #e6e6fa;
@@ -41,6 +42,7 @@
   --chart: #7c7cec;
   --chart-track: #2b2b47;
   --grid: #2a2a36;
+  --frame: #0b0b10;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -59,6 +61,7 @@
     --chart: #7c7cec;
     --chart-track: #2b2b47;
     --grid: #2a2a36;
+    --frame: #0b0b10;
     color-scheme: dark;
   }
 }
@@ -100,15 +103,32 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .pill { border-radius: 999px; color: var(--accent); border-color: var(--accent-soft); min-height: 32px; padding: 4px 14px; }
 
 /* Shell */
-.shell { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
-.sidebar { display: flex; flex-direction: column; gap: 4px; padding: 20px 12px; background: var(--surface); border-right: 1px solid var(--border); }
+/* Floating panels: sidebar, top bar and content sit apart on a frame. Not ".app-sidebar": pdf.js styles that class */
+.shell { display: grid; grid-template-columns: 232px 1fr; gap: 12px; padding: 12px; height: 100%; background: var(--frame); }
+.drag-strip { display: none; }
+:root.mac .shell { padding-top: 36px; }
+:root.mac .drag-strip { display: block; position: fixed; inset: 0 0 auto 0; height: 36px; z-index: 50; }
+.app-sidebar { display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); overflow-y: auto; min-height: 0; }
 .logo { display: block; height: 52px; width: auto; margin: -4px 0 12px -4px; }
+.logo-mark { display: none; width: 40px; height: 40px; border-radius: 50%; margin: 0 auto 12px; }
 .mobile-brand { display: none; }
 .nav-item { display: flex; align-items: center; gap: 10px; border: 0; background: none; text-align: left; color: var(--muted); }
 .nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.shell-main { overflow: auto; min-width: 0; }
+.shell-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+.content { flex: 1; min-height: 0; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 16px; }
+/* Medium windows: the sidebar folds to an icon rail so content keeps its room */
+@media (min-width: 761px) and (max-width: 1100px) {
+  .shell { grid-template-columns: 68px 1fr; }
+  .app-sidebar { padding: 14px 8px; align-items: center; }
+  .app-sidebar .logo { display: none; }
+  .app-sidebar .logo-mark { display: block; }
+  .app-sidebar .nav-item { justify-content: center; width: 48px; padding: 10px 0; }
+  .app-sidebar .nav-item span { display: none; }
+  .screen { padding: 24px 20px 32px; }
+}
 .tabbar { display: none; }
-.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; padding: 12px 24px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.topbar { display: flex; align-items: center; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); }
+.topbar .search-box { border-color: transparent; background: var(--bg); }
 .top-search { width: min(520px, 100%); }
 .top-search input { min-height: 38px; }
 .top-search kbd { font: inherit; font-size: 0.72rem; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; }
@@ -188,6 +208,7 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .reader.theme-sepia { --page-bg: #f6efdf; }
 .reader-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--surface); border-bottom: 1px solid var(--border); }
 .reader-bar.footer { justify-content: center; gap: 24px; border-bottom: 0; border-top: 1px solid var(--border); padding-top: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+:root.mac .reader-bar:not(.footer) { padding-left: 84px; padding-top: 10px; min-height: 52px; }
 .reader-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .reader-heading h1 { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reader-bar select { max-width: 160px; }
@@ -219,6 +240,8 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .hl-border-pink { --hl: var(--hl-pink); }
 .color-row { display: flex; gap: 10px; }
 .field { display: grid; gap: 6px; }
+.text-input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; min-height: 42px; }
+.text-input:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
 .field textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; resize: vertical; }
 .dialog-actions { display: flex; justify-content: space-between; }
 .danger-button { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); border-color: transparent; background: none; }
@@ -242,6 +265,14 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .ocrLayer span { position: absolute; color: transparent; white-space: pre; transform-origin: 0 0; cursor: text; font-family: sans-serif; }
 .ocrLayer span::selection { background: rgb(91 91 214 / 0.3); }
 .ocrLayer br::selection { background: transparent; }
+.ocr-status { position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--accent-soft); color: var(--text); font-size: 0.85rem; border-bottom: 1px solid var(--border); }
+.ocr-status .ocr-text { flex: 1; min-width: 0; }
+.ocr-status .link { font-size: 0.85rem; white-space: nowrap; }
+.ocr-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }
+.ocr-progress > span { display: block; height: 100%; background: var(--accent); transition: width 0.3s; }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent); border-right-color: transparent; animation: spin 0.8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 .chip { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--accent-soft); color: var(--accent); font-size: 0.8rem; white-space: nowrap; }
 .chip.busy { background: var(--surface-2); color: var(--muted); }
 
@@ -330,6 +361,21 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .reader.theme-dark .pdfViewer .page { background: #16161d; }
 .reader.theme-dark .hl { mix-blend-mode: screen; opacity: 0.45; }
 
+/* Custom select */
+.select { position: relative; display: inline-block; min-width: 0; }
+.select-button { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-width: 140px; max-width: 280px; text-align: left; }
+.select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select.full, .select.full .select-button { display: flex; width: 100%; max-width: none; }
+.select-list { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 100%; max-width: min(360px, 90vw); max-height: 50vh; overflow-y: auto; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 28px rgb(20 20 50 / 0.16); }
+.select-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.select-list li.active { background: var(--surface-2); }
+.select-list li[aria-selected="true"] { color: var(--accent); font-weight: 600; }
+.reader-bar .select-list { left: auto; right: 0; }
+.phone-only { display: none; }
+.export-menu summary { list-style: none; width: auto; height: auto; display: inline-flex; gap: 6px; color: var(--text); padding: 6px 12px; }
+.export-menu summary.disabled { opacity: 0.45; pointer-events: none; }
+.export-menu .menu-items { min-width: 200px; }
+
 /* Search */
 .search-box { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0 8px 0 14px; color: var(--muted); }
 .search-box input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: none; border: 0; outline: 0; min-height: 48px; }
@@ -341,8 +387,12 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 
 /* Mobile */
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
-  .sidebar { display: none; }
+  /* Phones stay edge to edge: no frame, gaps or panel borders */
+  .shell { grid-template-columns: 1fr; grid-template-rows: 1fr auto; gap: 0; padding: 0; background: var(--bg); }
+  :root.mac .shell { padding-top: 0; }
+  .shell-main { gap: 0; }
+  .content { border: 0; border-radius: 0; }
+  .app-sidebar { display: none; }
   .tabbar { display: flex; justify-content: space-around; background: var(--surface); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); }
   .tabbar .nav-item { flex-direction: column; gap: 2px; font-size: 0.65rem; background: none; padding: 6px 4px; min-width: 0; flex: 1; }
   .hero-figure { font-size: 2.6rem; }
@@ -356,5 +406,11 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
   .doc-status { width: 72px; }
   .doc-status > .muted { display: none; }
   .epub-view { padding: 12px 8px 0; }
-  .reader-bar select { max-width: 110px; }
+  .desktop-only { display: none; }
+  .phone-only { display: block; margin-bottom: 12px; }
+  .doc-filter, .doc-filter .select-button { width: 100%; max-width: none; }
+  .toolbar-row { flex-direction: column; align-items: stretch; }
+  .filter-row > * { flex: 1 1 100%; }
+  .page-header h1 { font-size: 1.3rem; }
+  .reader-heading h1 { font-size: 0.9rem; }
 }

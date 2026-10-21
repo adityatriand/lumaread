@@ -38,14 +38,15 @@ export function AppShell({ view, query, onNavigate, onSearch, children }: Props)
 
   const go = (v: View) => (setMoreOpen(false), onNavigate(v));
   const link = ({ view: v, label, Icon }: NavItem) => (
-    <button key={v} className="nav-item" aria-current={view === v ? "page" : undefined} onClick={() => go(v)}>
+    <button key={v} className="nav-item" title={label} aria-current={view === v ? "page" : undefined} onClick={() => go(v)}>
       <Icon size={18} aria-hidden="true" /> <span>{label}</span>
     </button>
   );
 
   return (
     <div className="shell">
-      <nav className="sidebar" aria-label="Main">
+      <div className="drag-strip" data-tauri-drag-region />
+      <nav className="app-sidebar" aria-label="Main">
         <Logo />
         {SIDEBAR.map(link)}
       </nav>
@@ -64,11 +65,13 @@ export function AppShell({ view, query, onNavigate, onSearch, children }: Props)
             <kbd>⌘K</kbd>
           </label>
         </div>
-        <div className="mobile-brand">
-          <Logo />
-          <button className="icon-button" aria-label="Search" onClick={() => go("search")}><Search size={20} /></button>
+        <div className="content">
+          <div className="mobile-brand">
+            <Logo />
+            <button className="icon-button" aria-label="Search" onClick={() => go("search")}><Search size={20} /></button>
+          </div>
+          {children}
         </div>
-        {children}
       </main>
       <nav className="tabbar" aria-label="Main">
         {TABS.map(link)}
