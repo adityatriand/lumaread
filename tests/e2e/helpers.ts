@@ -38,7 +38,7 @@ export const test = base.extend<{ app: void }>({
 export const invokedCalls = (page: Page) => page.evaluate(() => (globalThis as unknown as { __calls: Invoked[] }).__calls);
 
 export async function importAll(page: Page) {
-  await page.setInputFiles("input[type=file]", [fixture("doc.pdf"), fixture("book.epub")]);
+  await page.setInputFiles("input[type=file]", [fixture("Smoke PDF.pdf"), fixture("book.epub")]);
   await expect(page.locator(".doc-row")).toHaveCount(2);
 }
 
@@ -88,4 +88,10 @@ export { expect };
 export async function setPrefs(page: Page, prefs: Record<string, unknown>) {
   await page.evaluate((p) => localStorage.setItem("reading-prefs", JSON.stringify({ ...JSON.parse(localStorage.getItem("reading-prefs") ?? "{}"), ...p })), prefs);
   await page.reload();
+}
+
+// Picks an option from the app's custom dropdown (combobox + listbox)
+export async function choose(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label, exact: true }).click();
+  await page.getByRole("listbox", { name: label }).getByRole("option", { name: option, exact: true }).click();
 }

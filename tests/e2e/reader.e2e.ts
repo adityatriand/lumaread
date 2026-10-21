@@ -1,4 +1,4 @@
-import { bookFrame, expect, fixture, idb, importAll, row, test, setPrefs } from "./helpers";
+import { bookFrame, expect, fixture, idb, importAll, row, test, setPrefs, choose } from "./helpers";
 
 test("a plain browser gets only the app-only screen", async ({ browser }) => {
   const web = await browser.newPage();
@@ -13,7 +13,7 @@ test("imports EPUB and PDF, rejects unsupported and duplicate files", async ({ p
   await expect(row(page, "Smoke PDF")).toContainText("PDF");
   await expect(row(page, "Smoke Test Book")).toContainText("Test Author");
 
-  await page.setInputFiles("input[type=file]", [fixture("bad.pdf"), fixture("doc.pdf")]);
+  await page.setInputFiles("input[type=file]", [fixture("bad.pdf"), fixture("Smoke PDF.pdf")]);
   await expect(page.getByRole("alert")).toContainText("not a supported EPUB or PDF");
   await expect(page.getByRole("alert")).toContainText("already in your library");
   await expect(page.locator(".doc-row")).toHaveCount(2);
@@ -43,7 +43,7 @@ test("EPUB: blocks book scripts, navigates chapters, restores location and prefs
   await expect(book.locator("h1")).toHaveText("Chapter 1");
   expect(await page.evaluate(() => (window as { __pwned?: number }).__pwned)).toBeUndefined();
 
-  await page.getByLabel("Chapter").selectOption({ label: "Chapter Two" });
+  await choose(page, "Chapter", "Chapter Two");
   await expect(book.locator("h1")).toHaveText("Chapter 2");
 
   await page.getByRole("button", { name: "Reading preferences" }).click();

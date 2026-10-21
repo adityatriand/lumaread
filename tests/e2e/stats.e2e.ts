@@ -1,4 +1,4 @@
-import { expect, idb, importAll, invokedCalls, row, test } from "./helpers";
+import { expect, idb, importAll, invokedCalls, row, test, choose } from "./helpers";
 
 const NOW = new Date(2026, 9, 20, 20, 0).getTime(); // local time, so days line up with the app's calendar
 
@@ -62,7 +62,7 @@ test("reading time, pages and streak are tracked and shown per book and overall"
   await expect(page.locator(".data-table").first().locator("tbody tr")).toHaveCount(3);
 
   // Per book
-  await page.getByLabel("Book", { exact: true }).selectOption({ label: "Smoke PDF" });
+  await choose(page, "Book", "Smoke PDF");
   await expect(page.getByRole("heading", { name: "Progress" })).toBeVisible();
   await expect(page.locator(".progress-detail")).toContainText("67%");
   await expect(page.getByText("Last read: Page 2 / 3")).toBeVisible();

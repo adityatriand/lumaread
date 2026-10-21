@@ -1,4 +1,4 @@
-import { bookFrame, expect, idb, importAll, invokedCalls, row, selectText, test, setPrefs } from "./helpers";
+import { bookFrame, expect, idb, importAll, invokedCalls, row, selectText, test, setPrefs, choose } from "./helpers";
 
 test("PDF: highlight a selection, keep it after reload, edit its note", async ({ page }) => {
   await importAll(page);
@@ -33,7 +33,7 @@ test("EPUB: highlight inside the book and jump back to it from the notebook", as
   await importAll(page);
   await setPrefs(page, { layout: "spread" });
   await row(page, "Smoke Test Book").click();
-  await page.getByLabel("Chapter").selectOption({ label: "Chapter Two" });
+  await choose(page, "Chapter", "Chapter Two");
   await expect(bookFrame(page).locator("h1")).toHaveText("Chapter 2");
 
   const frame = page.frames().find((f) => f.url() === "about:srcdoc" || f !== page.mainFrame())!;
@@ -62,9 +62,11 @@ test("notebook exports Markdown and CSV through the save dialog", async ({ page 
   await page.getByLabel("Back to library").click();
   await page.getByRole("button", { name: "Highlights" }).first().click();
 
-  await page.getByRole("button", { name: "Markdown" }).click();
+  await page.getByText("Export", { exact: true }).click();
+  await page.getByRole("button", { name: "Markdown (.md)" }).click();
   await expect(page.getByRole("status")).toHaveText("Exported 1 items.");
-  await page.getByRole("button", { name: "CSV" }).click();
+  await page.getByText("Export", { exact: true }).click();
+  await page.getByRole("button", { name: "Spreadsheet (.csv)" }).click();
 
   const calls = await invokedCalls(page);
   const writes = calls.filter((c) => c.cmd === "plugin:fs|write_text_file");
