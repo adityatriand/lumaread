@@ -92,7 +92,18 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
     window.addEventListener("keyup", onKey);
 
     book.loaded.navigation.then((nav) => setToc(nav.toc));
-    rendition.display(lastCfi.current ?? epubTarget(initial)).catch(() => setError("This EPUB could not be displayed."));
+    // epub.js appends the next chapter only on scroll, so a short first section (a cover) leaves nothing to scroll;
+    // keep asking it to fill until the content overflows the screen (check() is the continuous manager's own step)
+    const fillScreen = () => {
+      const scroller = viewRef.current?.querySelector<HTMLElement>(".epub-container");
+      const manager = (rendition as unknown as { manager?: { check?: () => unknown } }).manager;
+      if (layout === "continuous" && scroller && scroller.scrollHeight <= scroller.clientHeight + 1) manager?.check?.();
+    };
+    rendition.on("rendered", () => setTimeout(fillScreen, 50)); // after the new chapter has measured its height
+
+    rendition
+      .display(lastCfi.current ?? epubTarget(initial))
+      .then(fillScreen, () => setError("This EPUB could not be displayed."));
 
     return () => {
       window.removeEventListener("keyup", onKey);
@@ -153,7 +164,7 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
       }
     >
       {error && <p className="alert" role="alert">{error}</p>}
-      <div ref={viewRef} className="epub-view" />
+      <div ref={viewRef} className="book-view" />
     </ReaderChrome>
   );
 }

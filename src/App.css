@@ -214,7 +214,8 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .reader-bar select { max-width: 160px; }
 .reader-body { flex: 1; position: relative; min-height: 0; background: var(--page-bg); }
 .pdf-container { position: absolute; inset: 0; overflow: auto; background: var(--surface-2); }
-.epub-view { height: 100%; max-width: 980px; margin: 0 auto; padding: 24px 24px 0; }
+/* Not ".epub-view": epub.js gives each chapter wrapper that class, and this padding would squeeze them to 0 width */
+.book-view { height: 100%; max-width: 980px; margin: 0 auto; padding: 24px 24px 0; }
 .popover { position: absolute; right: 12px; top: 60px; z-index: 20; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 32px rgb(20 20 50 / 0.15); padding: 16px; width: min(320px, calc(100% - 24px)); }
 
 /* Highlights */
@@ -405,7 +406,7 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
   .import-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .doc-status { width: 72px; }
   .doc-status > .muted { display: none; }
-  .epub-view { padding: 12px 8px 0; }
+  .book-view { padding: 12px 8px 0; }
   .desktop-only { display: none; }
   .phone-only { display: block; margin-bottom: 12px; }
   .doc-filter, .doc-filter .select-button { width: 100%; max-width: none; }
