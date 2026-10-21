@@ -6,6 +6,7 @@ import { openPdf } from "../../lib/pdf";
 import { containsPoint, mergeRects, normalizeRects } from "../../lib/rects";
 import { paintOcrLayer } from "../ocr/ocrLayer";
 import { useOcr, type OcrStatus } from "../ocr/useOcr";
+import { Select } from "../../components/Select";
 import { effectiveLayout, type Layout } from "../settings/prefs";
 import { pageOverlay } from "./pageOverlay";
 import { ReaderChrome } from "./ReaderChrome";
@@ -181,6 +182,12 @@ export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPr
     if (viewer && viewerModule.current) setZoom(applyLayout(viewer, viewerModule.current, layout));
   }, [layout]);
 
+  const zoomOptions = ZOOMS.map(([value, label]) => ({ value, label }));
+  function changeZoom(value: string) {
+    setZoom(value);
+    if (viewerRef.current) viewerRef.current.currentScaleValue = value;
+  }
+
   // nextPage/previousPage step a whole spread in side-by-side mode
   const next = () => viewerRef.current?.nextPage();
   const prev = () => viewerRef.current?.previousPage();
@@ -198,22 +205,15 @@ export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPr
       onNext={next}
       theme={prefs.theme}
       prefs={{ value: prefs, onChange: onPrefsChange, format: "pdf" }}
+      // Phones have no room for zoom in the header; it lives with the other reading options
+      status={doc.scanned && <OcrStatusBar status={ocr.status} onRecognizeAll={ocr.recognizeAll} />}
+      prefsExtra={<div className="phone-only"><Select label="Zoom" className="full" value={zoom} options={zoomOptions} onChange={changeZoom} /></div>}
       canPrev={page > 1}
       canNext={page < pages}
       tools={
         <>
           {tools}
-          {doc.scanned && <OcrChip status={ocr.status} onRecognizeAll={ocr.recognizeAll} />}
-          <select
-            aria-label="Zoom"
-            value={zoom}
-            onChange={(e) => {
-              setZoom(e.target.value);
-              if (viewerRef.current) viewerRef.current.currentScaleValue = e.target.value;
-            }}
-          >
-            {ZOOMS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
+          <Select label="Zoom" className="desktop-only" value={zoom} options={zoomOptions} onChange={changeZoom} />
         </>
       }
     >
@@ -228,17 +228,31 @@ export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPr
   );
 }
 
-function OcrChip({ status, onRecognizeAll }: { status: OcrStatus; onRecognizeAll: () => void }) {
+// Scanned books always show where text recognition stands, so a page that isn't selectable yet isn't a mystery
+function OcrStatusBar({ status, onRecognizeAll }: { status: OcrStatus; onRecognizeAll: () => void }) {
   const { recognized, total, busyPage, wholeBook, failed } = status;
-  if (total && recognized >= total) return <span className="chip" title="Every page has selectable, searchable text">Text recognized</span>;
-  if (wholeBook) return <span className="chip busy" role="status">Recognizing {recognized}/{total}…</span>;
+  const done = total > 0 && recognized >= total;
+  const working = busyPage !== undefined;
+  const text = failed
+    ? "Text recognition failed on a page."
+    : done
+      ? "All pages recognized — the whole book is searchable."
+      : working
+        ? wholeBook
+          ? `Recognizing all pages… ${recognized} of ${total}`
+          : `Recognizing text on page ${busyPage}…`
+        : `Scanned book · text recognized on ${recognized} of ${total} pages`;
+
   return (
-    <button
-      className="chip"
-      onClick={onRecognizeAll}
-      title="This PDF is scanned. Pages you read are recognized automatically; this does the whole book so it can be searched."
-    >
-      {failed ? "Recognition failed · Retry" : busyPage ? `Recognizing p. ${busyPage}…` : `Recognize all pages (${recognized}/${total})`}
-    </button>
+    <div className={`ocr-status${working ? " working" : ""}`} role="status">
+      {working && <span className="spinner" aria-hidden="true" />}
+      <span className="ocr-text">{text}</span>
+      {!done && !wholeBook && (
+        <button className="link" onClick={onRecognizeAll}>{failed ? "Retry" : "Recognize all pages"}</button>
+      )}
+      {total > 0 && (
+        <span className="ocr-progress" aria-hidden="true"><span style={{ width: `${(recognized / total) * 100}%` }} /></span>
+      )}
+    </div>
   );
 }

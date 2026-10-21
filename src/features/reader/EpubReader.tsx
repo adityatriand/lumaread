@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { epubAnchor, epubTarget, quoteIn } from "../../lib/anchor";
 import type { HighlightColor } from "../../lib/db";
 import { LINE_HEIGHTS, THEMES, effectiveLayout, type Layout, type ReadingPrefs } from "../settings/prefs";
+import { Select } from "../../components/Select";
 import { ReaderChrome } from "./ReaderChrome";
 import type { ReaderProps } from "./types";
 
@@ -140,10 +141,13 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
         <>
           {tools}
           {toc.length > 0 && (
-            <select aria-label="Chapter" value="" onChange={(e) => renditionRef.current?.display(e.target.value)}>
-              <option value="" disabled>Chapters</option>
-              {toc.map((item) => <option key={item.id} value={item.href}>{item.label.trim()}</option>)}
-            </select>
+            <Select
+              label="Chapter"
+              value=""
+              placeholder="Chapters"
+              options={toc.map((item) => ({ value: item.href, label: item.label.trim() }))}
+              onChange={(href) => renditionRef.current?.display(href)}
+            />
           )}
         </>
       }

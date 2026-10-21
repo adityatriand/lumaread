@@ -14,15 +14,17 @@ interface Props {
   tools?: ReactNode;
   prefs?: { value: ReadingPrefs; onChange: (p: ReadingPrefs) => void; format?: "pdf" | "epub" };
   theme?: string;
+  prefsExtra?: ReactNode; // shown above the reading options (e.g. zoom on phones)
+  status?: ReactNode; // strip under the header, e.g. OCR progress
   children: ReactNode;
 }
 
-export function ReaderChrome({ title, location, onClose, onPrev, onNext, canPrev = true, canNext = true, tools, prefs, theme = "light", children }: Props) {
+export function ReaderChrome({ title, location, onClose, onPrev, onNext, canPrev = true, canNext = true, tools, prefs, theme = "light", prefsExtra, status, children }: Props) {
   const [showPrefs, setShowPrefs] = useState(false);
 
   return (
     <div className={`reader theme-${theme}`}>
-      <header className="reader-bar">
+      <header className="reader-bar" data-tauri-drag-region>
         <button className="icon-button" onClick={onClose} aria-label="Back to library"><ArrowLeft size={20} /></button>
         <div className="reader-heading">
           <h1>{title}</h1>
@@ -37,9 +39,11 @@ export function ReaderChrome({ title, location, onClose, onPrev, onNext, canPrev
       </header>
       {prefs && showPrefs && (
         <div className="popover" role="dialog" aria-label="Reading preferences">
+          {prefsExtra}
           <ReadingPrefsForm prefs={prefs.value} onChange={prefs.onChange} format={prefs.format} />
         </div>
       )}
+      {status}
       <div className="reader-body">{children}</div>
       <footer className="reader-bar footer">
         <button className="icon-button" onClick={onPrev} disabled={!canPrev} aria-label="Previous page"><ChevronLeft size={20} /></button>
