@@ -5,6 +5,7 @@ import { epubAnchor, epubTarget, quoteIn } from "../../lib/anchor";
 import type { HighlightColor } from "../../lib/db";
 import { LINE_HEIGHTS, THEMES, effectiveLayout, type Layout, type ReadingPrefs } from "../settings/prefs";
 import { Select } from "../../components/Select";
+import { resolveHref } from "./epubHref";
 import { ReaderChrome } from "./ReaderChrome";
 import type { ReaderProps } from "./types";
 
@@ -20,8 +21,23 @@ const RENDITION: Record<Layout, object> = {
   horizontal: { flow: "paginated", spread: "none" },
 };
 
+// Our own per-chapter style tag rather than themes.register/select: epub.js never removes a theme's injected
+// stylesheet, so switching back to an earlier page colour left the later one winning. !important beats book CSS.
+const pageCss = (p: ReadingPrefs) =>
+  `html, body { background: ${THEMES[p.theme].background} !important; color: ${THEMES[p.theme].color} !important; }`;
+
+function paintPage(doc: Document, p: ReadingPrefs) {
+  let style = doc.getElementById("lumaread-page");
+  if (!style) {
+    style = doc.createElement("style");
+    style.id = "lumaread-page";
+    doc.head.appendChild(style);
+  }
+  style.textContent = pageCss(p);
+}
+
 function applyPrefs(rendition: Rendition, p: ReadingPrefs) {
-  rendition.themes.select(p.theme);
+  for (const c of rendition.getContents() as unknown as Contents[]) paintPage(c.document, p);
   rendition.themes.fontSize(`${p.fontSize}%`);
   rendition.themes.font(`"Source Serif 4 Variable", "Noto Serif", serif`);
   rendition.themes.override("line-height", String(LINE_HEIGHTS[p.lineSpacing]), true);
@@ -33,6 +49,8 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
   const drawnRef = useRef(new Map<string, string>()); // annotation id → cfiRange|color currently drawn
   const clickRef = useRef(onAnnotationClick);
   const layout = effectiveLayout(prefs.layout);
+  const prefsRef = useRef(prefs); // chapters loaded later read the current colours
+  prefsRef.current = prefs;
   const lastCfi = useRef<string>(undefined); // where to reopen after a layout switch
   const [renditionId, setRenditionId] = useState(0);
   const [toc, setToc] = useState<NavItem[]>([]);
@@ -44,16 +62,26 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
 
   useEffect(() => {
     const book = ePub(bytes.slice(0));
+    const spineHrefs = () => {
+      const hrefs: string[] = [];
+      book.spine.each((s: { href: string }) => hrefs.push(s.href));
+      return hrefs;
+    };
+    const chapterNames = new Map<string, string>(); // spine href → TOC label
     // Book scripts stay disabled: EPUB content is untrusted
     const rendition = book.renderTo(viewRef.current!, { width: "100%", height: "100%", ...RENDITION[layout], allowScriptedContent: false });
     renditionRef.current = rendition;
+    // Every navigation (chapter picker, links inside the book, reopening) goes through display()
+    const display = rendition.display.bind(rendition) as (target?: string | number) => Promise<void>;
+    rendition.display = ((target?: string | number) =>
+      display(typeof target === "string" ? resolveHref(target, spineHrefs()) : target)) as typeof rendition.display;
     setRenditionId((n) => n + 1);
     drawnRef.current.clear();
-    for (const [name, { background, color }] of Object.entries(THEMES)) rendition.themes.register(name, { body: { background, color } });
     rendition.hooks.content.register((contents: Contents) => {
       const style = contents.document.createElement("style");
       style.textContent = FONT_FACE;
       contents.document.head.appendChild(style);
+      paintPage(contents.document, prefsRef.current);
       contents.document.addEventListener("selectionchange", () => {
         if (contents.window.getSelection()?.isCollapsed) onSelect(null);
       });
@@ -61,7 +89,7 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
     applyPrefs(rendition, prefs);
 
     rendition.on("relocated", (loc: { start: { cfi: string; href: string; index: number } }) => {
-      const chapter = book.navigation?.get(loc.start.href)?.label.trim() || `Section ${loc.start.index + 1}`;
+      const chapter = chapterNames.get(loc.start.href) || `Section ${loc.start.index + 1}`;
       setLabel(chapter);
       lastCfi.current = loc.start.cfi;
       labelRef.current = chapter;
@@ -91,7 +119,21 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
     rendition.on("keyup", onKey);
     window.addEventListener("keyup", onKey);
 
-    book.loaded.navigation.then((nav) => setToc(nav.toc));
+    book.loaded.navigation.then((nav) => {
+      const hrefs = spineHrefs();
+      const flat: NavItem[] = [];
+      const walk = (items: NavItem[]) => items.forEach((i) => (flat.push(i), walk(i.subitems ?? [])));
+      walk(nav.toc);
+      for (const item of flat) {
+        const path = resolveHref(item.href, hrefs).split("#")[0];
+        if (!chapterNames.has(path)) chapterNames.set(path, item.label.trim());
+      }
+      setToc(nav.toc);
+      // The first location usually arrives before the TOC; name it now rather than on the next page turn
+      const current = rendition.location?.start;
+      const name = current && chapterNames.get(current.href);
+      if (name) setLabel(name), (labelRef.current = name);
+    });
     // epub.js appends the next chapter only on scroll, so a short first section (a cover) leaves nothing to scroll;
     // keep asking it to fill until the content overflows the screen (check() is the continuous manager's own step)
     const fillScreen = () => {
