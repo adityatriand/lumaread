@@ -3,6 +3,7 @@ import type { PDFPageProxy } from "pdfjs-dist";
 import { addDoc, findByHash, type DocMeta, type Format } from "../../lib/db";
 import { openPdf } from "../../lib/pdf";
 import { detectFormat } from "./detectFormat";
+import { titleFromName } from "./titleFromName";
 
 // shortcut: arbitrary cap until the PRD's max-file-size decision is made
 const MAX_BYTES = 200 * 1024 * 1024;
@@ -80,10 +81,14 @@ export async function importFile(file: File): Promise<DocMeta> {
     throw new Error(`"${file.name}" could not be opened. It may be damaged or password-protected.`);
   }
 
+  // PDFs: the filename is what the reader chose (embedded PDF titles are often junk like "Microsoft Word - x.docx");
+  // EPUBs carry a publisher title. Either way an author in "Title - Author" fills a missing one.
+  const fromName = titleFromName(file.name);
   const doc: DocMeta = {
     id: crypto.randomUUID(),
-    title: meta.title?.trim() || file.name.replace(/\.[^.]+$/, ""),
-    author: meta.author?.trim() || undefined,
+    title: (format === "epub" && meta.title?.trim()) || fromName.title,
+    author: meta.author?.trim() || fromName.author,
+    fileName: file.name,
     format,
     size: file.size,
     hash,

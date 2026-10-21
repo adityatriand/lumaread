@@ -1,3 +1,4 @@
+import { titleFromName } from "../features/library/titleFromName";
 import { epubAnchor, pdfAnchor, type Anchor, type RangeAnchor, type Rect } from "./anchor";
 
 export type Format = "pdf" | "epub";
@@ -12,6 +13,7 @@ export interface DocMeta {
   addedAt: number;
   openedAt?: number;
   cover?: string; // small JPEG data URL
+  fileName?: string; // as imported; the library keeps its own copy, so renames on disk don't reach it
   textIndexed?: boolean; // texts store holds every page/section
   pageCount?: number; // PDF pages, set when indexed
   scanned?: boolean; // PDF whose pages are mostly images without a text layer
@@ -72,7 +74,7 @@ let dbPromise: Promise<IDBDatabase> | undefined;
 
 function openDb() {
   return (dbPromise ??= new Promise((resolve, reject) => {
-    const r = indexedDB.open("lumaread", 4);
+    const r = indexedDB.open("lumaread", 5);
     r.onupgradeneeded = (e) => {
       const db = r.result;
       if (e.oldVersion < 1) {
@@ -102,6 +104,19 @@ function openDb() {
       }
       if (e.oldVersion < 4) {
         db.createObjectStore("sessions", { keyPath: "id" }).createIndex("docId", "docId");
+      }
+      if (e.oldVersion < 5) {
+        // Earlier imports kept "Title - Author" filenames whole; split them so the author shows
+        r.transaction!.objectStore("docs").openCursor().onsuccess = (ev) => {
+          const cursor = (ev.target as IDBRequest<IDBCursorWithValue | null>).result;
+          if (!cursor) return;
+          const doc = cursor.value as DocMeta;
+          if (!doc.author) {
+            const { title, author } = titleFromName(`${doc.title}.x`);
+            if (author) cursor.update({ ...doc, title, author });
+          }
+          cursor.continue();
+        };
       }
     };
     r.onsuccess = () => resolve(r.result);
