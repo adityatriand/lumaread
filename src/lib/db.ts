@@ -14,6 +14,7 @@ export interface DocMeta {
   openedAt?: number;
   cover?: string; // small JPEG data URL
   fileName?: string; // as imported; the library keeps its own copy, so renames on disk don't reach it
+  epubLocations?: string; // epub.js locations (stable page breaks), computed once per EPUB
   textIndexed?: boolean; // texts store holds every page/section
   pageCount?: number; // PDF pages, set when indexed
   scanned?: boolean; // PDF whose pages are mostly images without a text layer

@@ -2,7 +2,7 @@ import serifFont from "@fontsource-variable/source-serif-4/files/source-serif-4-
 import ePub, { type Contents, type NavItem, type Rendition } from "epubjs";
 import { useEffect, useRef, useState } from "react";
 import { epubAnchor, epubTarget, quoteIn } from "../../lib/anchor";
-import type { HighlightColor } from "../../lib/db";
+import { patchDoc, type HighlightColor } from "../../lib/db";
 import { LINE_HEIGHTS, THEMES, effectiveLayout, type Layout, type ReadingPrefs } from "../settings/prefs";
 import { Select } from "../../components/Select";
 import { resolveHref } from "./epubHref";
@@ -20,6 +20,11 @@ const RENDITION: Record<Layout, object> = {
   spread: { flow: "paginated", spread: "always", minSpreadWidth: 0 },
   horizontal: { flow: "paginated", spread: "none" },
 };
+
+const PAGE_CHARS = 1600; // about one printed paperback page
+
+// EPUB content is untrusted: no script of the book's may run, whatever the frame's sandbox allows
+const BOOK_CSP = `<meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'" />`;
 
 // Our own per-chapter style tag rather than themes.register/select: epub.js never removes a theme's injected
 // stylesheet, so switching back to an earlier page colour left the later one winning. !important beats book CSS.
@@ -62,14 +67,21 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
 
   useEffect(() => {
     const book = ePub(bytes.slice(0));
+    // Registered once the book is open so it runs after epub.js's own resource rewrite (which replaces the output)
+    book.opened.then(() =>
+      book.spine.hooks.serialize.register((_: string, section: { output: string }) => {
+        section.output = section.output.replace(/<head([^>]*)>/i, `<head$1>${BOOK_CSP}`);
+      }),
+    );
     const spineHrefs = () => {
       const hrefs: string[] = [];
       book.spine.each((s: { href: string }) => hrefs.push(s.href));
       return hrefs;
     };
     const chapterNames = new Map<string, string>(); // spine href → TOC label
-    // Book scripts stay disabled: EPUB content is untrusted
-    const rendition = book.renderTo(viewRef.current!, { width: "100%", height: "100%", ...RENDITION[layout], allowScriptedContent: false });
+    // allowScriptedContent only lifts the sandbox flag: WebKit (macOS app) runs no event listeners in a frame without
+    // it, so selection, links and keys were dead there. The book's own scripts stay blocked by BOOK_CSP and the app CSP.
+    const rendition = book.renderTo(viewRef.current!, { width: "100%", height: "100%", ...RENDITION[layout], allowScriptedContent: true });
     renditionRef.current = rendition;
     // Every navigation (chapter picker, links inside the book, reopening) goes through display()
     const display = rendition.display.bind(rendition) as (target?: string | number) => Promise<void>;
@@ -82,34 +94,64 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
       style.textContent = FONT_FACE;
       contents.document.head.appendChild(style);
       paintPage(contents.document, prefsRef.current);
-      contents.document.addEventListener("selectionchange", () => {
-        if (contents.window.getSelection()?.isCollapsed) onSelect(null);
-      });
+      // Our own selection detection: epub.js's "selected" event never fires in WebKit (the macOS app's webview)
+      let settle: ReturnType<typeof setTimeout>;
+      const check = () => {
+        clearTimeout(settle);
+        settle = setTimeout(() => reportSelection(contents), 250); // let drag handles and double-clicks settle
+      };
+      for (const type of ["selectionchange", "mouseup", "touchend", "keyup"]) contents.document.addEventListener(type, check);
     });
     applyPrefs(rendition, prefs);
 
-    rendition.on("relocated", (loc: { start: { cfi: string; href: string; index: number } }) => {
-      const chapter = chapterNames.get(loc.start.href) || `Section ${loc.start.index + 1}`;
-      setLabel(chapter);
-      lastCfi.current = loc.start.cfi;
+    // Reflowable text has no fixed pages; epub.js "locations" cut the book every PAGE_CHARS characters, giving page
+    // numbers that stay the same across window sizes, fonts and devices. Computed once per book, then stored.
+    let pagesReady = false;
+    // locationFromCfi returns the index after the matching break, i.e. already 1-based; clamp the book's ends
+    const pageOf = (cfi: string) => {
+      if (!pagesReady) return undefined;
+      const total = book.locations.length();
+      return { n: Math.min(Math.max(book.locations.locationFromCfi(cfi) as unknown as number, 1), total), total };
+    };
+
+    function report(loc: { cfi: string; href: string; index: number }) {
+      const chapter = chapterNames.get(loc.href) || `Section ${loc.index + 1}`;
+      const page = pageOf(loc.cfi);
+      const text = page ? `${chapter} · Page ${page.n} / ${page.total}` : chapter;
+      setLabel(text);
+      lastCfi.current = loc.cfi;
       labelRef.current = chapter;
-      // shortcut: percent by section, not exact; switch to book.locations.generate() if users need precision
-      onLocation(epubAnchor(loc.start.cfi), (loc.start.index + 1) / (book.spine.last().index + 1), chapter);
+      // Until pages are counted, progress falls back to the chapter position
+      const percent = page ? book.locations.percentageFromCfi(loc.cfi) : (loc.index + 1) / (book.spine.last().index + 1);
+      onLocation(epubAnchor(loc.cfi), percent, text);
+    }
+    rendition.on("relocated", (loc: { start: { cfi: string; href: string; index: number } }) => report(loc.start));
+
+    book.ready.then(async () => {
+      if (doc.epubLocations) book.locations.load(doc.epubLocations);
+      else {
+        await book.locations.generate(PAGE_CHARS);
+        patchDoc(doc.id, { epubLocations: book.locations.save() }).catch(() => undefined);
+      }
+      if (renditionRef.current !== rendition) return; // reader closed or rebuilt meanwhile
+      pagesReady = true;
+      const start = rendition.location?.start;
+      if (start) report(start);
     });
 
-    rendition.on("selected", (cfiRange: string, contents: Contents) => {
+    function reportSelection(contents: Contents) {
       const sel = contents.window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+      if (!sel || sel.isCollapsed || !sel.rangeCount || !sel.toString().trim()) return onSelect(null);
       const range = sel.getRangeAt(0);
       const frame = (contents.window.frameElement as HTMLElement).getBoundingClientRect();
       const r = range.getBoundingClientRect();
       onSelect({
-        anchor: { v: 1, kind: "epub", cfiRange, quote: quoteIn(contents.document.body.textContent ?? "", sel.toString()) },
+        anchor: { v: 1, kind: "epub", cfiRange: contents.cfiFromRange(range), quote: quoteIn(contents.document.body.textContent ?? "", sel.toString()) },
         label: labelRef.current,
         rect: new DOMRect(r.left + frame.left, r.top + frame.top, r.width, r.height),
         clear: () => sel.removeAllRanges(),
       });
-    });
+    }
 
     // Arrow keys inside the book iframe don't reach window listeners
     const onKey = (e: KeyboardEvent) => {
@@ -131,8 +173,7 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
       setToc(nav.toc);
       // The first location usually arrives before the TOC; name it now rather than on the next page turn
       const current = rendition.location?.start;
-      const name = current && chapterNames.get(current.href);
-      if (name) setLabel(name), (labelRef.current = name);
+      if (current) report(current);
     });
     // epub.js appends the next chapter only on scroll, so a short first section (a cover) leaves nothing to scroll;
     // keep asking it to fill until the content overflows the screen (check() is the continuous manager's own step)
