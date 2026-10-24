@@ -5,7 +5,7 @@
 **A private, offline reading library for macOS and Android.**<br />
 Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and track your reading, all on your device.
 
-![Version](https://img.shields.io/badge/version-1.0.0-5b5bd6)
+![Version](https://img.shields.io/badge/version-1.1.0-5b5bd6)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%2013.3%2B%20%7C%20Android-1b1b2f)
 ![Offline](https://img.shields.io/badge/works-100%25%20offline-2ea44f)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white)
@@ -33,9 +33,10 @@ Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and 
 ### Library
 | | |
 | :-- | :-- |
-| 📥 **Import** | EPUB and PDF. Format is checked from file contents, duplicates are caught by SHA-256, files up to 200 MB, cover thumbnails |
+| 📥 **Import** | EPUB and PDF, plus CBZ comics, TXT and Markdown (converted to EPUB on import, so highlights, search, read aloud and sync work on them too). Format is checked from file contents, duplicates are caught by SHA-256, files up to 200 MB, cover thumbnails |
 | 🏷️ **Details** | Titles and authors from metadata or from `Title - Author` file names, editable afterwards |
-| 🏠 **Home & Library** | Continue reading, recent files, EPUB / PDF tabs |
+| 🏠 **Home & Library** | Continue reading, recent files; format tabs (EPUB, PDF, Comics, Text), filter by shelf and status, sort by recent, added, title, author or progress |
+| 🗂️ **Shelves** | Put books on your own shelves from a book's menu; rename or delete shelves under Manage shelves |
 
 ### Reading
 | | |
@@ -46,7 +47,8 @@ Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and 
 | 🎨 **Page colour** | Light, Sepia or Dark for both EPUB and PDF. Sepia tints the PDF page itself, not just the margins |
 | ↔️ **Layouts** | Desktop: Scroll or Side by side (book spreads, cover alone). Phone: Scroll or Swipe, one page per swipe |
 | 🔖 **Bookmarks** | Name a place, jump back from the reader or the Bookmarks page, rename or delete. A ribbon marks bookmarked pages |
-| 🎧 **Read aloud** | Uses the device's installed voices, follows along page by page, 0.75×–2× speed. Scanned pages are run through OCR just before they're read |
+| 🔍 **Find in book** | ⌘F / Ctrl+F or the search button: every match in the open book, ignoring case and accents, highlighted page by page |
+| 🎧 **Read aloud** | Uses the device's installed voices, follows along highlighting the sentence, 0.75×–2× speed, sleep timer (15 / 30 / 60 min or end of chapter). Scanned pages are run through OCR just before they're read |
 | 📍 **Progress** | Saved as a versioned anchor and restored on reopen. Jumping in from a highlight, note, bookmark or search hit doesn't overwrite your last-read page |
 
 ### Notes & knowledge
@@ -166,10 +168,10 @@ Reader engines take and emit LumaRead's own anchors (`src/lib/anchor.ts`), never
 <summary><b>Project layout</b></summary>
 
 ```
-src/lib/                       db.ts (IndexedDB v7), anchor.ts, hash.ts, pdf.ts, rects.ts, saveFile.ts
+src/lib/                       db.ts (IndexedDB v7), anchor.ts, hash.ts, pdf.ts, rects.ts, saveFile.ts, zip.ts
 src/components/                AppShell, Select, ConfirmDialog, useOutsideClose
-src/features/library/          import, Home, Library
-src/features/reader/           ReaderView, PdfReader, EpubReader, ReaderChrome, BookmarkMenu
+src/features/library/          import (+ CBZ/TXT/MD → EPUB in convert.ts), Home, Library, shelves
+src/features/reader/           ReaderView, PdfReader, EpubReader, ReaderChrome, BookmarkMenu, FindBar
 src/features/bookmarks/        Bookmarks page
 src/features/sync/             merge rules, wire format + crypto, pairing & sync protocol, Sync page
 src/features/readaloud/        speech (voices + sentence chunks), playback hook, player bar

@@ -14,12 +14,22 @@ function hasPdfHeader(bytes: Uint8Array) {
   return false;
 }
 
-// Trust file contents, not extensions; EPUB name check covers files that break the OCF "mimetype first" rule
-export function detectFormat(bytes: Uint8Array, name: string): Format | null {
+// Formats converted to EPUB on import (see convert.ts)
+export type Convertible = "cbz" | "txt" | "md";
+
+// Trust file contents, not extensions; EPUB name check covers files that break the OCF "mimetype first" rule.
+// Text needs its extension (any bytes could be text) and must hold no NUL bytes, which binary files do.
+export function detectFormat(bytes: Uint8Array, name: string): Format | Convertible | null {
+  const lower = name.toLowerCase();
   if (hasPdfHeader(bytes)) return "pdf";
   if (ascii(bytes, 0, 4) === "PK\x03\x04") {
     const ocf = ascii(bytes, 30, 8) === "mimetype" && ascii(bytes, 38, 20) === "application/epub+zip";
-    if (ocf || name.toLowerCase().endsWith(".epub")) return "epub";
+    if (ocf || lower.endsWith(".epub")) return "epub";
+    if (lower.endsWith(".cbz")) return "cbz";
+    return null;
   }
+  const text = bytes.length > 0 && !bytes.subarray(0, 4096).includes(0);
+  if (text && lower.endsWith(".txt")) return "txt";
+  if (text && /\.(md|markdown)$/.test(lower)) return "md";
   return null;
 }

@@ -11,6 +11,7 @@ interface Props {
   onStats: (item: LibraryItem) => void;
   onEdit: (item: LibraryItem) => void;
   onReset: (item: LibraryItem) => void;
+  onShelves: (item: LibraryItem) => void;
   onViewAll: () => void;
 }
 
@@ -18,7 +19,7 @@ function greeting(hour = new Date().getHours()) {
   return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 }
 
-export function HomePage({ items, onOpen, onRemove, onImported, onStats, onEdit, onReset, onViewAll }: Props) {
+export function HomePage({ items, onOpen, onRemove, onImported, onStats, onEdit, onReset, onShelves, onViewAll }: Props) {
   const current = items.find((i) => i.doc.openedAt && i.progress && i.progress.percent < 1);
 
   return (
@@ -64,7 +65,7 @@ export function HomePage({ items, onOpen, onRemove, onImported, onStats, onEdit,
             </div>
             <ul className="doc-list">
               {items.slice(0, 5).map((item) => (
-                <DocRow key={item.doc.id} item={item} onOpen={() => onOpen(item)} onRemove={() => onRemove(item)} onStats={() => onStats(item)} onEdit={() => onEdit(item)} onReset={() => onReset(item)} />
+                <DocRow key={item.doc.id} item={item} onOpen={() => onOpen(item)} onRemove={() => onRemove(item)} onStats={() => onStats(item)} onEdit={() => onEdit(item)} onReset={() => onReset(item)} onShelves={() => onShelves(item)} />
               ))}
             </ul>
           </section>

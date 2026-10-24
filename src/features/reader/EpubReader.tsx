@@ -7,7 +7,7 @@ import { LINE_HEIGHTS, THEMES, effectiveLayout, type Layout, type ReadingPrefs }
 import { Select } from "../../components/Select";
 import { resolveHref } from "./epubHref";
 import { ReaderChrome } from "./ReaderChrome";
-import type { ReaderProps } from "./types";
+import type { ReaderProps, TextBridge } from "./types";
 
 // Book pages render in an iframe, so the app's bundled font has to be declared inside it
 const FONT_FACE = `@font-face{font-family:"Source Serif 4 Variable";font-weight:200 900;src:url(${new URL(serifFont, location.href)}) format("woff2")}`;
@@ -24,8 +24,9 @@ const RENDITION: Record<Layout, object> = {
 
 const PAGE_CHARS = 1600; // about one printed paperback page
 
-// EPUB content is untrusted: no script of the book's may run, whatever the frame's sandbox allows
-const BOOK_CSP = `<meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'" />`;
+// EPUB content is untrusted: no script of the book's may run, whatever the frame's sandbox allows.
+// base-uri 'self': epub.js sets each chapter's <base> to its own (same-origin) URL so relative images and styles resolve
+const BOOK_CSP = `<meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'self'" />`;
 
 // Our own per-chapter style tag rather than themes.register/select: epub.js never removes a theme's injected
 // stylesheet, so switching back to an earlier page colour left the later one winning. !important beats book CSS.
@@ -61,7 +62,7 @@ function pointAt(doc: Document, offset: number): { node: Node; offset: number } 
   return undefined;
 }
 
-export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tools, speechRef, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
+export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tools, textRef, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
   const viewRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition>(null);
   const drawnRef = useRef(new Map<string, string>()); // annotation id → cfiRange|color currently drawn
@@ -126,8 +127,8 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
     let pagesReady = false;
     // locationFromCfi returns the index after the matching break, i.e. already 1-based; clamp the book's ends
     const pageOf = (cfi: string) => {
-      if (!pagesReady) return undefined;
       const total = book.locations.length();
+      if (!pagesReady || !total) return undefined; // image-only books (comics) have no text to count pages by
       return { n: Math.min(Math.max(book.locations.locationFromCfi(cfi) as unknown as number, 1), total), total };
     };
 
@@ -199,7 +200,11 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
       const manager = (rendition as unknown as { manager?: { check?: () => unknown } }).manager;
       if (layout === "continuous" && scroller && scroller.scrollHeight <= scroller.clientHeight + 1) manager?.check?.();
     };
-    rendition.on("rendered", () => setTimeout(fillScreen, 50)); // after the new chapter has measured its height
+    rendition.on("rendered", (section: { index: number }) => {
+      setTimeout(fillScreen, 50); // after the new chapter has measured its height
+      const pending = pendingMark.current;
+      if (pending?.unit === section.index) textRef?.current?.mark(pending);
+    });
 
     rendition
       .display(lastCfi.current ?? epubTarget(initial))
@@ -217,10 +222,11 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
     if (renditionRef.current) applyPrefs(renditionRef.current, prefs);
   }, [prefs]);
 
-  const spokenCfi = useRef<string>(undefined); // read-aloud mark currently drawn
+  const spokenCfi = useRef<string>(undefined); // mark currently drawn (read aloud, find)
+  const pendingMark = useRef<Parameters<TextBridge["mark"]>[0]>(null); // asked for before its chapter was loaded
 
   useEffect(() => {
-    if (!speechRef) return;
+    if (!textRef) return;
     type Loc = { start: { index: number; cfi: string }; end: { cfi: string } };
     const location = () => {
       const loc = renditionRef.current?.currentLocation() as unknown as Loc | undefined;
@@ -228,7 +234,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
     };
     const contentsOf = (index: number) =>
       (renditionRef.current?.getContents() as unknown as (Contents & { sectionIndex: number })[] | undefined)?.find((c) => c.sectionIndex === index);
-    speechRef.current = {
+    textRef.current = {
       position() {
         const loc = location();
         if (!loc) return undefined;
@@ -265,6 +271,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
         if (spokenCfi.current) rendition.annotations.remove(spokenCfi.current, "highlight");
         spokenCfi.current = undefined;
         const contents = spoken && contentsOf(spoken.unit);
+        pendingMark.current = spoken && !contents ? spoken : null; // drawn once that chapter renders
         const start = contents && pointAt(contents.document, spoken!.chunk.start);
         const end = contents && pointAt(contents.document, spoken!.chunk.end);
         if (!contents || !start || !end) return;
@@ -279,8 +286,8 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
         });
       },
     };
-    return () => void (speechRef.current = null);
-  }, [speechRef]);
+    return () => void (textRef.current = null);
+  }, [textRef]);
 
   useEffect(() => {
     const target = epubTarget(goTo?.anchor);

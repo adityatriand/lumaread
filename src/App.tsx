@@ -7,6 +7,7 @@ import { EditDetailsDialog } from "./features/library/EditDetailsDialog";
 import { HomePage } from "./features/library/HomePage";
 import { BookmarksPage } from "./features/bookmarks/BookmarksPage";
 import { Library } from "./features/library/Library";
+import { ShelvesDialog } from "./features/library/ShelvesDialog";
 import type { LibraryItem } from "./features/library/types";
 import { NotebookPage } from "./features/notebook/NotebookPage";
 import { ReaderView } from "./features/reader/ReaderView";
@@ -31,6 +32,7 @@ export default function App() {
   const [statsDocId, setStatsDocId] = useState("");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<DocMeta>();
+  const [shelving, setShelving] = useState<DocMeta>();
   const openIdRef = useRef<string>(null);
   // Opened at a highlight, note or search hit: last-read stays put until the reader moves away from that spot.
   // Holds the first location reported after the jump (undefined = not reported yet, null = not a jump)
@@ -92,6 +94,19 @@ export default function App() {
     refresh();
   }
 
+  // Shelves live on each book, so renaming or deleting one updates every book on it (editedAt: sync carries it)
+  async function editShelf(from: string, to?: string) {
+    try {
+      for (const { doc } of items.filter((i) => i.doc.shelves?.includes(from))) {
+        const shelves = [...new Set(doc.shelves!.map((s) => (s === from ? to : s)).filter((s): s is string => !!s))].sort((a, b) => a.localeCompare(b));
+        await patchDoc(doc.id, { shelves, editedAt: Date.now() });
+      }
+    } catch {
+      setError("Could not update the shelf.");
+    }
+    await refresh();
+  }
+
   // Back to the first page and "Not started"; highlights, notes, bookmarks and reading stats stay
   async function resetProgress({ doc }: LibraryItem) {
     const ok = await confirmDanger(
@@ -145,19 +160,27 @@ export default function App() {
   }
 
   const showStats = (item: LibraryItem) => (setStatsDocId(item.doc.id), setView("stats"));
-  const pageProps = { items, onOpen: (item: LibraryItem) => openDoc(item), onRemove: removeDoc, onImported: imported, onStats: showStats, onEdit: (item: LibraryItem) => setEditing(item.doc), onReset: resetProgress };
+  const pageProps = { items, onOpen: (item: LibraryItem) => openDoc(item), onRemove: removeDoc, onImported: imported, onStats: showStats, onEdit: (item: LibraryItem) => setEditing(item.doc), onReset: resetProgress, onShelves: (item: LibraryItem) => setShelving(item.doc) };
   return (
     <AppShell view={view} query={query} onNavigate={setView} onSearch={(q) => (setQuery(q), q && setView("search"))}>
       {banner}
       <ConfirmHost />
       {view === "home" && <HomePage {...pageProps} onViewAll={() => setView("library")} />}
-      {view === "library" && <Library {...pageProps} />}
-      {(view === "notebook" || view === "notes") && <NotebookPage key={view} items={items} initialTab={view === "notes" ? "notes" : "highlights"} onOpenAt={openDoc} />}
+      {view === "library" && <Library {...pageProps} onRenameShelf={(from, to) => editShelf(from, to)} onDeleteShelf={(name) => editShelf(name)} />}
+      {view === "notebook" && <NotebookPage items={items} onOpenAt={openDoc} />}
       {view === "bookmarks" && <BookmarksPage items={items} onOpenAt={openDoc} />}
       {view === "stats" && <StatsPage items={items} docId={statsDocId} onDocChange={setStatsDocId} onOpen={(item) => openDoc(item)} />}
       {view === "search" && <SearchPage items={items} indexing={indexing} query={query} onQueryChange={setQuery} onOpenAt={openDoc} />}
       {view === "sync" && <SyncPage onChanged={imported} />}
       {view === "settings" && <SettingsPage prefs={prefs} onChange={changePrefs} />}
+      {shelving && (
+        <ShelvesDialog
+          doc={shelving}
+          allShelves={[...new Set(items.flatMap((i) => i.doc.shelves ?? []))].sort((a, b) => a.localeCompare(b))}
+          onSave={(shelves) => patchDoc(shelving.id, { shelves, editedAt: Date.now() }).then(refresh, () => setError("Could not save the shelves."))}
+          onClose={() => setShelving(undefined)}
+        />
+      )}
       {editing && (
         <EditDetailsDialog
           doc={editing}

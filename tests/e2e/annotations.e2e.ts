@@ -58,7 +58,7 @@ test("EPUB: highlight inside the book and jump back to it from the notebook", as
   expect(saved.anchor.cfiRange).toMatch(/^epubcfi\(/);
 
   await page.getByLabel("Back to library").click();
-  await page.getByRole("button", { name: "Highlights" }).first().click();
+  await page.getByRole("button", { name: "Notebook" }).first().click();
   await expect(page.locator(".note-card")).toContainText("Chapter 2 paragraph 3");
   await page.locator(".note-open").click();
   await expect(bookFrame(page).locator("h1")).toHaveText("Chapter 2");
@@ -73,7 +73,7 @@ test("notebook exports Markdown and CSV through the save dialog", async ({ page 
   await page.getByRole("button", { name: "Highlight yellow" }).click();
   await expect(page.locator(".hl")).toHaveCount(1);
   await page.getByLabel("Back to library").click();
-  await page.getByRole("button", { name: "Highlights" }).first().click();
+  await page.getByRole("button", { name: "Notebook" }).first().click();
 
   await page.getByText("Export", { exact: true }).click();
   await page.getByRole("button", { name: "Markdown (.md)" }).click();

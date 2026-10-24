@@ -47,7 +47,7 @@ function paintHighlights(viewer: Viewer, page: number, annotations: Annotation[]
   }
 }
 
-interface Spoken { page: number; text: string; from: number; end: number }
+interface Spoken { page: number; text: string; from: number; end: number; nth?: number }
 
 // Read aloud: tint the sentence being spoken, found in the page's selectable text (OCR words on scanned pages).
 // Returns where the match ended so the next sentence searches past it (repeated phrases).
@@ -55,7 +55,7 @@ function paintSpoken(root: HTMLElement, viewer: Viewer, spoken: Spoken | undefin
   root.querySelectorAll(".speak-layer").forEach((l) => l.remove());
   const div = spoken && viewer.getPageView(spoken.page - 1)?.div;
   const text = div?.querySelector(".ocrLayer") ?? div?.querySelector(".textLayer");
-  const found = text && findRange(text, spoken!.text, spoken!.from);
+  const found = text && findRange(text, spoken!.text, spoken!.from, spoken!.nth);
   const layer = found && pageOverlay(div!, "speak-layer");
   if (!found || !layer) return undefined;
   for (const r of mergeRects(normalizeRects([...found.range.getClientRects()], pageBox(div!)))) {
@@ -78,7 +78,7 @@ function applyLayout(viewer: Viewer, { ScrollMode, SpreadMode }: ViewerModule, l
   return fit;
 }
 
-export function PdfReader({ doc, bytes, initial, goTo, prefs, annotations, tools, speechRef, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
+export function PdfReader({ doc, bytes, initial, goTo, prefs, annotations, tools, textRef, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
   const layout = effectiveLayout(prefs.layout);
   const layoutRef = useRef(layout);
   const viewerModule = useRef<ViewerModule>(null);
@@ -171,16 +171,16 @@ export function PdfReader({ doc, bytes, initial, goTo, prefs, annotations, tools
   }, [annotations]);
 
   useEffect(() => {
-    if (!speechRef) return;
-    speechRef.current = {
+    if (!textRef) return;
+    textRef.current = {
       position: () => (viewerRef.current ? { unit: viewerRef.current.currentPageNumber, offset: 0 } : undefined),
       show: (unit) => {
         const viewer = viewerRef.current;
         if (viewer && viewer.currentPageNumber !== unit) viewer.currentPageNumber = unit;
       },
-      mark: (spoken) => {
+      mark: (spot) => {
         const prev = spokenRef.current;
-        spokenRef.current = spoken ? { page: spoken.unit, text: spoken.chunk.text, from: prev?.page === spoken.unit ? prev.end : 0, end: 0 } : undefined;
+        spokenRef.current = spot ? { page: spot.unit, text: spot.chunk.text, from: prev?.page === spot.unit ? prev.end : 0, end: 0, nth: spot.nth } : undefined;
         repaintRef.current();
       },
       // Scanned pages have no text until recognised; recognise the page about to be read first
@@ -190,8 +190,8 @@ export function PdfReader({ doc, bytes, initial, goTo, prefs, annotations, tools
         return words && ocrText(words);
       },
     };
-    return () => void (speechRef.current = null);
-  }, [speechRef]);
+    return () => void (textRef.current = null);
+  }, [textRef]);
 
   useEffect(() => {
     const page = pdfPage(goTo?.anchor);

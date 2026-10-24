@@ -71,7 +71,7 @@ describe("sync merge", () => {
     const local = { ...empty(), docs: [doc("A", { title: "Old", editedAt: 1 })], sessions: [{ id: "s", doc: "A", day: "2026-10-20", startedAt: 0, endedAt: 100, activeMs: 50, pages: 1, startPercent: 0, endPercent: 0.1 }] };
     const remote = { ...empty(), docs: [doc("A", { title: "New", editedAt: 2 })], sessions: [{ ...local.sessions[0], endedAt: 200, activeMs: 120 }] };
     const plan = planMerge(local, remote);
-    expect(plan.docPatches).toEqual([{ hash: "A", patch: { title: "New", author: undefined, editedAt: 2 } }]);
+    expect(plan.docPatches).toEqual([{ hash: "A", patch: { title: "New", author: undefined, shelves: undefined, editedAt: 2 } }]);
     expect(plan.put.sessions[0].activeMs).toBe(120);
   });
 });

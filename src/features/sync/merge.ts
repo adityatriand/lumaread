@@ -3,7 +3,7 @@ import type { Annotation, Bookmark, DocMeta, Progress, Session, Tombstone } from
 // What one device sends another. Device-local doc ids are replaced by the book's SHA-256 (`doc`), the one id
 // both devices share; derived data (search text, OCR, page breaks) is rebuilt on arrival instead of sent.
 type OnDoc<T extends { docId: string }> = Omit<T, "docId"> & { doc: string };
-export type SyncDoc = Pick<DocMeta, "hash" | "title" | "author" | "format" | "size" | "addedAt" | "cover" | "fileName" | "editedAt">;
+export type SyncDoc = Pick<DocMeta, "hash" | "title" | "author" | "format" | "size" | "addedAt" | "cover" | "fileName" | "editedAt" | "source" | "shelves">;
 export interface SyncState {
   docs: SyncDoc[];
   removed: string[]; // hashes this device removed: don't send those books here
@@ -16,7 +16,7 @@ export interface SyncState {
 
 export interface MergePlan {
   fetch: SyncDoc[]; // books to copy here
-  docPatches: { hash: string; patch: Pick<DocMeta, "title" | "author" | "editedAt"> }[];
+  docPatches: { hash: string; patch: Pick<DocMeta, "title" | "author" | "shelves" | "editedAt"> }[];
   put: { progress: OnDoc<Progress>[]; annotations: OnDoc<Annotation>[]; bookmarks: OnDoc<Bookmark>[]; sessions: OnDoc<Session>[] };
   remove: { annotations: string[]; bookmarks: string[]; progress: string[] }; // ids; book hashes for progress
   tombstones: Tombstone[]; // remote tombstones newer than ours
@@ -36,7 +36,7 @@ export function planMerge(local: SyncState, remote: SyncState): MergePlan {
 
   const docPatches = remote.docs.flatMap((r) => {
     const l = localDocs.get(r.hash);
-    return l && (r.editedAt ?? 0) > (l.editedAt ?? 0) ? [{ hash: r.hash, patch: { title: r.title, author: r.author, editedAt: r.editedAt } }] : [];
+    return l && (r.editedAt ?? 0) > (l.editedAt ?? 0) ? [{ hash: r.hash, patch: { title: r.title, author: r.author, shelves: r.shelves, editedAt: r.editedAt } }] : [];
   });
 
   const localTombs = byKey(local.tombstones, (t) => t.key);

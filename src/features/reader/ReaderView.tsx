@@ -1,4 +1,4 @@
-import { Headphones } from "lucide-react";
+import { Headphones, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { confirmDanger } from "../../components/ConfirmDialog";
 import type { Anchor } from "../../lib/anchor";
@@ -12,12 +12,13 @@ import { useReadingSession } from "../stats/useReadingSession";
 import { AnnotationEditor } from "../notebook/AnnotationEditor";
 import { citation } from "../notebook/citation";
 import { BookmarkMenu } from "./BookmarkMenu";
+import { FindBar } from "./FindBar";
 import { EpubReader } from "./EpubReader";
 import { PdfReader } from "./PdfReader";
 import { SelectionToolbar } from "./SelectionToolbar";
-import type { ReaderProps, SpeechBridge, TextSelection } from "./types";
+import type { ReaderProps, TextBridge, TextSelection } from "./types";
 
-type Props = Omit<ReaderProps, "annotations" | "onSelect" | "onAnnotationClick" | "tools" | "goTo" | "speechRef">;
+type Props = Omit<ReaderProps, "annotations" | "onSelect" | "onAnnotationClick" | "tools" | "goTo" | "textRef">;
 
 export function ReaderView(props: Props) {
   const { doc } = props;
@@ -31,9 +32,19 @@ export function ReaderView(props: Props) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [here, setHere] = useState<{ anchor: Anchor; label: string }>();
   const [goTo, setGoTo] = useState<{ anchor: Anchor }>();
-  const speechRef = useRef<SpeechBridge>(null);
+  const textRef = useRef<TextBridge>(null);
+  const [finding, setFinding] = useState(false);
+
+  // ⌘F / Ctrl+F opens find (keys pressed inside an EPUB chapter frame don't reach here; the button does)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") (e.preventDefault(), setFinding(true));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // Listening counts as reading for the timer, even with no input
-  const player = useReadAloud(doc.id, speechRef, session.touch, setMessage);
+  const player = useReadAloud(doc.id, textRef, session.touch, setMessage);
 
   useEffect(() => {
     listAnnotations(doc.id).then(setAnnotations, () => setMessage("Highlights could not be loaded."));
@@ -103,9 +114,12 @@ export function ReaderView(props: Props) {
       <Reader
         {...props}
         goTo={goTo}
-        speechRef={speechRef}
+        textRef={textRef}
         tools={
           <>
+            <button className="icon-button" aria-label="Find in book" aria-pressed={finding} onClick={() => setFinding((f) => !f)}>
+              <Search size={20} className={finding ? "accent" : undefined} />
+            </button>
             <button
               className="icon-button"
               aria-label={player.state === "off" ? "Read aloud" : "Stop reading aloud"}
@@ -154,8 +168,9 @@ export function ReaderView(props: Props) {
       )}
       {sharing && <ShareQuoteDialog {...sharing} title={doc.title} author={doc.author} onClose={() => setSharing(undefined)} />}
       {marked && <div className="bookmark-ribbon" aria-hidden="true" />}
+      {finding && <FindBar docId={doc.id} bridge={textRef} scanned={doc.scanned} onClose={() => setFinding(false)} />}
       <ReadingTimer docId={doc.id} session={session} />
-      <ReadAloudBar player={player} location={here?.label} />
+      <ReadAloudBar player={player} location={here?.label} chapters={doc.format === "epub"} />
       {message && <div className="toast info" role="status">{message}</div>}
     </>
   );

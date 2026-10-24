@@ -11,11 +11,14 @@ export interface TextSelection {
   clear: () => void;
 }
 
-// What read-aloud needs from an engine; units are those of the texts store (PDF page, EPUB spine index)
-export interface SpeechBridge {
+// How read aloud and find-in-book move through the text and highlight a spot; units are those of the texts
+// store (PDF page, EPUB spine index)
+export interface TextBridge {
   position: () => { unit: number; offset: number } | undefined; // where the reader is, as an offset into that unit's text
   show: (unit: number, offset: number) => void; // bring that spot on screen if it isn't already
-  mark: (spoken: { unit: number; chunk: Chunk } | null) => void; // highlight the sentence being read; null clears it
+  // Highlight a stretch of text (the sentence being read, a find match); null clears it. `nth` picks which
+  // occurrence of identical text on that unit, for engines that locate text by matching (PDF)
+  mark: (spot: { unit: number; chunk: Chunk; nth?: number } | null) => void;
   textOf?: (unit: number) => Promise<string | undefined>; // fresher text than the store has (scanned PDFs: OCR on demand)
 }
 
@@ -29,7 +32,7 @@ export interface ReaderProps {
   prefs: ReadingPrefs;
   annotations: Annotation[];
   tools?: ReactNode; // extra reader-bar buttons supplied by ReaderView
-  speechRef?: RefObject<SpeechBridge | null>; // filled by the engine
+  textRef?: RefObject<TextBridge | null>; // filled by the engine
   onPrefsChange: (p: ReadingPrefs) => void;
   onLocation: (anchor: Anchor, percent: number, label: string) => void;
   onSelect: (selection: TextSelection | null) => void;

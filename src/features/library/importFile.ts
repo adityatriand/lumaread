@@ -3,6 +3,7 @@ import type { PDFPageProxy } from "pdfjs-dist";
 import { addDoc, findByHash, type DocMeta, type Format } from "../../lib/db";
 import { sha256Hex } from "../../lib/hash";
 import { openPdf } from "../../lib/pdf";
+import { cbzToEpub, textToEpub } from "./convert";
 import { detectFormat } from "./detectFormat";
 import { titleFromName } from "./titleFromName";
 
@@ -62,9 +63,23 @@ async function extract(format: Format, buf: ArrayBuffer): Promise<Extracted> {
 
 export async function importFile(file: File): Promise<DocMeta> {
   if (file.size > MAX_BYTES) throw new Error(`"${file.name}" is larger than 200 MB.`);
-  const buf = await file.arrayBuffer();
-  const format = detectFormat(new Uint8Array(buf), file.name);
-  if (!format) throw new Error(`"${file.name}" is not a supported EPUB or PDF file.`);
+  const original = await file.arrayBuffer();
+  const detected = detectFormat(new Uint8Array(original), file.name);
+  if (!detected) throw new Error(`"${file.name}" is not a supported EPUB, PDF, CBZ, TXT or Markdown file.`);
+  const fromName = titleFromName(file.name);
+
+  // Comics and text become EPUBs here; the stored (and hashed) bytes are the EPUB
+  const source = detected === "pdf" || detected === "epub" ? undefined : detected;
+  const format: Format = detected === "pdf" ? "pdf" : "epub";
+  let buf = original;
+  if (source) {
+    try {
+      const epub = source === "cbz" ? await cbzToEpub(new Uint8Array(original), fromName.title, fromName.author) : textToEpub(new Uint8Array(original), source, fromName.title, fromName.author);
+      buf = epub.slice().buffer;
+    } catch {
+      throw new Error(source === "cbz" ? `"${file.name}" has no comic pages (JPG, PNG, GIF or WebP) or is damaged.` : `"${file.name}" could not be read as text.`);
+    }
+  }
 
   const hash = await sha256Hex(buf);
   const existing = await findByHash(hash);
@@ -79,14 +94,14 @@ export async function importFile(file: File): Promise<DocMeta> {
 
   // PDFs: the filename is what the reader chose (embedded PDF titles are often junk like "Microsoft Word - x.docx");
   // EPUBs carry a publisher title. Either way an author in "Title - Author" fills a missing one.
-  const fromName = titleFromName(file.name);
   const doc: DocMeta = {
     id: crypto.randomUUID(),
     title: (format === "epub" && meta.title?.trim()) || fromName.title,
     author: meta.author?.trim() || fromName.author,
     fileName: file.name,
     format,
-    size: file.size,
+    source,
+    size: buf.byteLength,
     hash,
     addedAt: Date.now(),
     cover: meta.cover,

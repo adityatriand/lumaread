@@ -31,7 +31,7 @@ export function ImportButton({ onImported }: Props) {
         <span className="import-label">{busy ? "Importing…" : "Import"}</span>
         <input
           type="file"
-          accept=".epub,.pdf,application/epub+zip,application/pdf"
+          accept=".epub,.pdf,.cbz,.txt,.md,.markdown,application/epub+zip,application/pdf,text/plain,text/markdown"
           multiple
           hidden
           disabled={busy}

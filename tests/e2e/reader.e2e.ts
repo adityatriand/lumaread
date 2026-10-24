@@ -14,7 +14,7 @@ test("imports EPUB and PDF, rejects unsupported and duplicate files", async ({ p
   await expect(row(page, "Smoke Test Book")).toContainText("Test Author");
 
   await page.setInputFiles("input[type=file]", [fixture("bad.pdf"), fixture("Smoke PDF.pdf")]);
-  await expect(page.getByRole("alert")).toContainText("not a supported EPUB or PDF");
+  await expect(page.getByRole("alert")).toContainText("not a supported EPUB, PDF, CBZ, TXT or Markdown file");
   await expect(page.getByRole("alert")).toContainText("already in your library");
   await expect(page.locator(".doc-row")).toHaveCount(2);
 });
@@ -102,9 +102,9 @@ test("upgrading from DB v1 moves old progress into versioned anchors", async ({ 
 test("reset progress starts the book over", async ({ page }) => {
   await importAll(page);
   await row(page, "Smoke PDF").click();
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await expect.poll(async () => (await idb<{ anchor: { page: number } }>(page, "progress")).map((p) => p.anchor.page)).toContain(3);
+  await expect(page.locator(".reader-bar.footer")).toContainText("Page 1 / 3"); // keys do nothing until the viewer is up
+  await page.keyboard.press("ArrowRight"); // page 2 of 3: started, not finished, so it's on "Continue reading"
+  await expect.poll(async () => (await idb<{ anchor: { page: number } }>(page, "progress")).map((p) => p.anchor.page)).toContain(2);
   await page.getByLabel("Back to library").click();
   await expect(page.getByRole("heading", { name: "Continue reading" })).toBeVisible();
 

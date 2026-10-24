@@ -19,6 +19,15 @@ describe("detectFormat", () => {
     expect(detectFormat(bytes("PK\x03\x04whatever"), "archive.zip")).toBeNull();
   });
 
+  it("detects comics and text by name, text only without binary bytes", () => {
+    expect(detectFormat(bytes("PK\x03\x04whatever"), "Issue 1.CBZ")).toBe("cbz");
+    expect(detectFormat(bytes("Once upon a time"), "story.txt")).toBe("txt");
+    expect(detectFormat(bytes("# Notes"), "notes.markdown")).toBe("md");
+    expect(detectFormat(bytes("# Notes"), "notes.md")).toBe("md");
+    expect(detectFormat(bytes("bin\0ary"), "data.txt")).toBeNull();
+    expect(detectFormat(bytes("Once upon a time"), "story.doc")).toBeNull();
+  });
+
   it("rejects other files, including ones misnamed .pdf", () => {
     expect(detectFormat(bytes("hello"), "fake.pdf")).toBeNull();
     expect(detectFormat(new Uint8Array(), "empty.epub")).toBeNull();

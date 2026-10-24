@@ -46,7 +46,7 @@ async function collectState(): Promise<SyncState> {
   const onDoc = <T extends { docId: string }>(list: T[]) =>
     list.flatMap(({ docId, ...rest }) => (hashOf.has(docId) ? [{ ...rest, doc: hashOf.get(docId)! }] : []));
   return {
-    docs: docs.map(({ hash, title, author, format, size, addedAt, cover, fileName, editedAt }) => ({ hash, title, author, format, size, addedAt, cover, fileName, editedAt })),
+    docs: docs.map(({ hash, title, author, format, size, addedAt, cover, fileName, editedAt, source, shelves }) => ({ hash, title, author, format, size, addedAt, cover, fileName, editedAt, source, shelves })),
     removed: tombstones.filter((t) => t.kind === "doc").map((t) => t.id),
     progress: onDoc(progress),
     annotations: onDoc(annotations),

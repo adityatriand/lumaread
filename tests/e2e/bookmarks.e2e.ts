@@ -3,6 +3,7 @@ import { confirmModal, expect, idb, importAll, row, test } from "./helpers";
 test("bookmark a page by name, see the ribbon, jump back, then manage it on the Bookmarks page", async ({ page }) => {
   await importAll(page);
   await row(page, "Smoke PDF").click();
+  await expect(page.locator(".reader-bar.footer")).toContainText("Page 1 / 3"); // keys do nothing until the viewer is up
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
   await expect(page.locator(".reader-bar.footer")).toContainText("Page 3 / 3");
@@ -77,6 +78,7 @@ test("opening a search hit doesn't move the last-read page until the reader move
   await importAll(page);
   await expect.poll(async () => (await idb<{ textIndexed?: boolean }>(page, "docs")).every((d) => d.textIndexed)).toBe(true);
   await row(page, "Smoke PDF").click();
+  await expect(page.locator(".reader-bar.footer")).toContainText("Page 1 / 3"); // keys do nothing until the viewer is up
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
   const lastRead = async () => (await idb<{ anchor: { page?: number } }>(page, "progress")).map((p) => p.anchor.page);

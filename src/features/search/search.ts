@@ -13,7 +13,7 @@ export interface SearchResult {
 }
 
 // Case- and accent-insensitive; each precomposed letter folds to one char, so offsets stay aligned for Latin text
-const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+export const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 const SNIPPET = 60;
 const MAX_PER_KIND = 100;

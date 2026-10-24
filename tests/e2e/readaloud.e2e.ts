@@ -85,6 +85,27 @@ test("reads a PDF aloud from the current page, highlighting the sentence, turnin
   await expect(page.locator(".speak-mark")).toHaveCount(0);
 });
 
+test("the sleep timer pauses reading at the next sentence once the time is up", async ({ page }) => {
+  await page.clock.install({ time: new Date(2026, 9, 25, 22, 0).getTime() });
+  await fakeSpeech(page);
+  await openIndexedPdf(page);
+  await page.getByRole("button", { name: "Read aloud", exact: true }).click();
+  const bar = page.getByRole("region", { name: "Read aloud" });
+  await expect.poll(async () => (await spoken(page)).length).toBe(1);
+
+  await bar.getByRole("button", { name: /^Sleep timer off/ }).click();
+  await expect(bar.getByRole("button", { name: /^Sleep timer in 15 minutes/ })).toContainText("15m");
+  await page.clock.runFor(16 * 60_000);
+  await endSentence(page);
+  await expect(bar).toContainText("Paused");
+  await expect(page.getByRole("status").filter({ hasText: "Sleep timer" })).toBeVisible();
+  expect(await spoken(page)).toHaveLength(1); // page 2 wasn't started
+
+  // Resuming continues where it stopped: the next page
+  await bar.getByRole("button", { name: "Resume reading aloud" }).click();
+  await expect.poll(async () => (await spoken(page)).at(-1)?.text).toBe("Page 2 hello LumaRead");
+});
+
 test("reading to the end of the book stops by itself and clears the mark", async ({ page }) => {
   await fakeSpeech(page, true);
   await openIndexedPdf(page);
@@ -101,6 +122,7 @@ test("scanned PDF: pages are recognised just before they are read, and the mark 
   await page.setInputFiles("input[type=file]", fixture("Scanned Sample - LumaRead Tests.pdf"));
   await expect.poll(async () => (await idb<{ scanned?: boolean }>(page, "docs"))[0]?.scanned, { timeout: 30_000 }).toBe(true);
   await row(page, "Scanned Sample").click();
+  await expect(page.locator(".reader-bar.footer")).toContainText("Page 1 / 2"); // reading starts where the open book is
 
   await page.getByRole("button", { name: "Read aloud", exact: true }).click();
   await expect.poll(async () => (await spoken(page)).map((s) => s.text).join(" "), { timeout: 60_000 }).toMatch(/Selamat membaca/i);
