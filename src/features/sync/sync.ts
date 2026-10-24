@@ -84,9 +84,8 @@ async function applyPlan(plan: MergePlan, fetchBook?: (doc: SyncDoc, index: numb
 type Target = Pick<Nearby, "host" | "port">;
 
 async function call(to: Target, header: Record<string, unknown>, payload: Uint8Array) {
-  const reply = await invoke<ArrayBuffer>("plugin:lansync|send", pack({ v: 1, from: deviceId(), ...header }, payload), {
-    headers: { "x-host": to.host, "x-port": String(to.port) },
-  });
+  const data = b64(pack({ v: 1, from: deviceId(), ...header }, payload)); // text: Android's IPC can't send raw bytes
+  const reply = await invoke<ArrayBuffer>("plugin:lansync|send", { host: to.host, port: to.port, data });
   const { json, bin } = unpack<{ ok: boolean; error?: string }>(new Uint8Array(reply));
   if (!json.ok) throw new Error(json.error ?? "Sync failed.");
   return bin;
@@ -184,7 +183,7 @@ export async function startSync(onChanged: () => void, onPair: (r: PairRequest) 
     const message = new Uint8Array(raw);
     const id = new DataView(raw).getUint32(0);
     const reply = await handle(message.subarray(4), onChanged);
-    await invoke("plugin:lansync|respond", reply, { headers: { "x-id": String(id) } });
+    await invoke("plugin:lansync|respond", { id, data: b64(reply) });
   };
   await invoke("plugin:lansync|start", { id: deviceId(), name: deviceName(), onRequest: channel });
 }
@@ -194,6 +193,9 @@ export function stopSync() {
   pending = undefined;
   return invoke("plugin:lansync|stop").catch(() => undefined);
 }
+
+// Tauri rejects invoke() with the Rust error string, not an Error
+export const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export const nearby = async () => (await invoke<Nearby[] | null>("plugin:lansync|peers")) ?? [];
 

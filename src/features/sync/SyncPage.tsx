@@ -2,7 +2,7 @@ import { Laptop, RefreshCw, Smartphone, Wifi } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { forgetPeer, listPeers, type PeerDevice } from "../../lib/db";
 import { timeAgo } from "../../lib/format";
-import { deviceName, nearby, pairWith, setDeviceName, startSync, stopSync, syncWith, type Nearby, type PairRequest } from "./sync";
+import { deviceName, errorText, nearby, pairWith, setDeviceName, startSync, stopSync, syncWith, type Nearby, type PairRequest } from "./sync";
 
 const POLL_MS = 2000;
 const deviceIcon = (name: string) => (/phone|android|tablet/i.test(name) ? Smartphone : Laptop);
@@ -31,7 +31,7 @@ export function SyncPage({ onChanged }: { onChanged: () => void }) {
       (request) => alive && setPairing({ ...request, incoming: true }),
     ).then(
       () => alive && setStatus("ready"),
-      (e: Error) => alive && (setStatus("failed"), setError(e.message || String(e))),
+      (e) => alive && (setStatus("failed"), setError(errorText(e))),
     );
     const poll = setInterval(() => nearby().then((list) => alive && setFound(list), () => undefined), POLL_MS);
     return () => {
@@ -47,7 +47,7 @@ export function SyncPage({ onChanged }: { onChanged: () => void }) {
     try {
       setPairing({ ...(await pairWith(peer)), incoming: false });
     } catch (e) {
-      setResult((e as Error).message);
+      setResult(errorText(e));
     } finally {
       setBusy(undefined);
     }
@@ -77,7 +77,7 @@ export function SyncPage({ onChanged }: { onChanged: () => void }) {
       onChanged();
       loadPaired();
     } catch (e) {
-      setResult((e as Error).message);
+      setResult(errorText(e));
     } finally {
       setBusy(undefined);
       setStep(undefined);

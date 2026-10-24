@@ -1,6 +1,7 @@
 //! Wi-Fi sync transport. Finds other LumaRead apps on the same network (UDP broadcast) and carries opaque
 //! messages between them over TCP. Pairing, encryption and merging all live in the web app, so nothing here
 //! can read what it carries.
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -14,7 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{
-    ipc::{Channel, InvokeBody, InvokeResponseBody, Request, Response},
+    ipc::{Channel, InvokeResponseBody, Response},
     plugin::{Builder, TauriPlugin},
     Manager, Runtime, State,
 };
@@ -60,15 +61,10 @@ fn write_frame(s: &mut TcpStream, data: &[u8]) -> io::Result<()> {
     s.flush()
 }
 
-fn header<'a>(request: &'a Request<'_>, name: &str) -> Result<&'a str, String> {
-    request.headers().get(name).and_then(|v| v.to_str().ok()).ok_or(format!("missing {name}"))
-}
-
-fn body(request: &Request<'_>) -> Result<Vec<u8>, String> {
-    match request.body() {
-        InvokeBody::Raw(bytes) => Ok(bytes.clone()),
-        InvokeBody::Json(_) => Err("expected a binary body".into()),
-    }
+// Bytes from the web app arrive base64-encoded: Android's IPC can't carry a raw request body
+// (it turns one into a JSON number array), so one text format serves every platform
+fn decode(data: &str) -> Result<Vec<u8>, String> {
+    STANDARD.decode(data).map_err(|_| "malformed message".to_string())
 }
 
 // One request per connection: hand it to the web app, wait for its reply, send that back
@@ -180,12 +176,10 @@ fn peers(state: State<'_, Sync>) -> Vec<Peer> {
     peers.values().map(|(p, _)| p.clone()).collect()
 }
 
-/// Sends one message to a peer and returns its reply; runs off the main thread (a reply can be a whole book)
+/// Sends one message to a peer and returns its reply (raw); runs off the main thread (a reply can be a whole book)
 #[tauri::command]
-async fn send(request: Request<'_>) -> Result<Response, String> {
-    let host = header(&request, "x-host")?.to_string();
-    let port: u16 = header(&request, "x-port")?.parse().map_err(|_| "bad port")?;
-    let data = body(&request)?;
+async fn send(host: String, port: u16, data: String) -> Result<Response, String> {
+    let data = decode(&data)?;
     tauri::async_runtime::spawn_blocking(move || -> io::Result<Vec<u8>> {
         let addr = (host.as_str(), port);
         let mut s = TcpStream::connect_timeout(&std::net::ToSocketAddrs::to_socket_addrs(&addr)?.next().ok_or(io::ErrorKind::NotFound)?, Duration::from_secs(5))?;
@@ -201,10 +195,10 @@ async fn send(request: Request<'_>) -> Result<Response, String> {
 
 /// The web app's reply to an inbound request (id from the 4-byte prefix it was given)
 #[tauri::command]
-fn respond(state: State<'_, Sync>, request: Request<'_>) -> Result<(), String> {
-    let id: u32 = header(&request, "x-id")?.parse().map_err(|_| "bad id")?;
+fn respond(state: State<'_, Sync>, id: u32, data: String) -> Result<(), String> {
+    let bytes = decode(&data)?;
     if let Some(tx) = state.waiting.lock().unwrap().remove(&id) {
-        let _ = tx.send(body(&request)?);
+        let _ = tx.send(bytes);
     }
     Ok(())
 }
