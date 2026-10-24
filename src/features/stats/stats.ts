@@ -83,6 +83,14 @@ export function estimateRemainingMs(sessions: Session[], percent: number): numbe
   return ((1 - percent) * ms) / gained;
 }
 
+// Stopwatch style for the live reader timer: 4:05, 1:02:33
+export function formatClock(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor(s / 60) % 60;
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
 export function formatDuration(ms: number): string {
   const minutes = Math.round(ms / 60_000);
   if (minutes < 1) return ms > 0 ? "<1m" : "0m";

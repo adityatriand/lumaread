@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Session } from "../../lib/db";
-import { byDay, dayKey, estimateRemainingMs, formatDuration, lastDays, streaks, summarize, timeByBook } from "./stats";
+import { byDay, dayKey, estimateRemainingMs, formatClock, formatDuration, lastDays, streaks, summarize, timeByBook } from "./stats";
 
 const NOW = new Date(2026, 9, 20, 15).getTime(); // 20 Oct 2026, 15:00 local
 const at = (daysAgo: number) => new Date(2026, 9, 20 - daysAgo, 10).getTime();
@@ -67,6 +67,7 @@ describe("summaries", () => {
 
   it("formats durations", () => {
     expect(formatDuration(0)).toBe("0m");
+    expect([formatClock(0), formatClock(245_900), formatClock(3_753_000)]).toEqual(["0:00", "4:05", "1:02:33"]);
     expect(formatDuration(20_000)).toBe("<1m");
     expect(formatDuration(45 * 60_000)).toBe("45m");
     expect(formatDuration(125 * 60_000)).toBe("2h 05m");
@@ -75,13 +76,19 @@ describe("summaries", () => {
 
 describe("achievement card helpers", () => {
   it("buckets long ranges into weeks ending today and keeps short ones daily", async () => {
-    const { bucket, achievementCaption } = await import("./achievementCard");
+    const { bucket, bucketDays, achievementCaption } = await import("./achievementCard");
+    const days = Array.from({ length: 90 }, (_, i) => `d${i + 1}`);
+    expect(bucketDays(days.slice(0, 7))).toEqual(days.slice(0, 7));
+    // Each weekly bucket is labelled by its first day, matching bucket()
+    expect(bucketDays(days)).toHaveLength(13);
+    expect(bucketDays(days).at(-1)).toBe("d84");
+    expect(bucketDays(days)[0]).toBe("d1");
     expect(bucket([1, 2, 3])).toEqual([1, 2, 3]);
     const weeks = bucket(Array.from({ length: 90 }, (_, i) => i + 1));
     expect(weeks).toHaveLength(13);
     expect(weeks.at(-1)).toBe(84 + 85 + 86 + 87 + 88 + 89 + 90);
     expect(weeks[0]).toBe(1 + 2 + 3 + 4 + 5 + 6);
-    expect(achievementCaption({ period: "Last 7 days", ms: 125 * 60_000, pages: 140, streak: 4, daysRead: 5, daily: [] })).toBe(
+    expect(achievementCaption({ period: "Last 7 days", ms: 125 * 60_000, pages: 140, streak: 4, daysRead: 5, daily: [], days: [] })).toBe(
       "2h 05m of reading and 140 pages in the last 7 days and a 4-day streak. #LumaRead",
     );
   });

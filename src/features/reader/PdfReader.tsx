@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import "pdfjs-dist/web/pdf_viewer.css";
 import { pdfAnchor, pdfPage, quoteIn, type RangeAnchor } from "../../lib/anchor";
 import type { Annotation } from "../../lib/db";
 import { openPdf } from "../../lib/pdf";
 import { containsPoint, mergeRects, normalizeRects } from "../../lib/rects";
 import { paintOcrLayer } from "../ocr/ocrLayer";
+import { findRange } from "../readaloud/findText";
+import { ocrText } from "../ocr/ocr";
 import { useOcr, type OcrStatus } from "../ocr/useOcr";
 import { Select } from "../../components/Select";
 import { effectiveLayout, type Layout } from "../settings/prefs";
@@ -45,6 +47,26 @@ function paintHighlights(viewer: Viewer, page: number, annotations: Annotation[]
   }
 }
 
+interface Spoken { page: number; text: string; from: number; end: number }
+
+// Read aloud: tint the sentence being spoken, found in the page's selectable text (OCR words on scanned pages).
+// Returns where the match ended so the next sentence searches past it (repeated phrases).
+function paintSpoken(root: HTMLElement, viewer: Viewer, spoken: Spoken | undefined): number | undefined {
+  root.querySelectorAll(".speak-layer").forEach((l) => l.remove());
+  const div = spoken && viewer.getPageView(spoken.page - 1)?.div;
+  const text = div?.querySelector(".ocrLayer") ?? div?.querySelector(".textLayer");
+  const found = text && findRange(text, spoken!.text, spoken!.from);
+  const layer = found && pageOverlay(div!, "speak-layer");
+  if (!found || !layer) return undefined;
+  for (const r of mergeRects(normalizeRects([...found.range.getClientRects()], pageBox(div!)))) {
+    const el = document.createElement("div");
+    el.className = "speak-mark";
+    Object.assign(el.style, { left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` });
+    layer.appendChild(el);
+  }
+  return found.endChar;
+}
+
 type ViewerModule = typeof import("pdfjs-dist/web/pdf_viewer.mjs");
 
 // Side by side uses "even" spreads: page 1 (the cover) alone, then 2|3, 4|5 like a printed book
@@ -56,7 +78,7 @@ function applyLayout(viewer: Viewer, { ScrollMode, SpreadMode }: ViewerModule, l
   return fit;
 }
 
-export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
+export function PdfReader({ doc, bytes, initial, goTo, prefs, annotations, tools, speechRef, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
   const layout = effectiveLayout(prefs.layout);
   const layoutRef = useRef(layout);
   const viewerModule = useRef<ViewerModule>(null);
@@ -71,9 +93,21 @@ export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPr
 
   annotationsRef.current = annotations;
 
+  const spokenRef = useRef<Spoken>(undefined);
+  // Page DOM is rebuilt on render, zoom and OCR, so the read-aloud mark is repainted after each
+  const repaintSpoken = (page?: number) => {
+    const s = spokenRef.current;
+    if (!viewerRef.current || !containerRef.current || (page !== undefined && s?.page !== page)) return;
+    const end = paintSpoken(containerRef.current, viewerRef.current, s);
+    if (s && end) s.end = end;
+  };
+  const repaintRef = useRef(repaintSpoken);
+  repaintRef.current = repaintSpoken;
+
   const ocr = useOcr(doc.id, !!doc.scanned, (page, words) => {
     const div = viewerRef.current?.getPageView(page - 1)?.div;
     if (div?.querySelector(".canvasWrapper canvas")) paintOcrLayer(div, words);
+    repaintRef.current(page);
   });
   const ocrRef = useRef(ocr);
   ocrRef.current = ocr;
@@ -112,7 +146,9 @@ export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPr
         paintHighlights(viewer, pageNumber, annotationsRef.current);
         const words = ocrRef.current.words(pageNumber);
         if (words) paintOcrLayer(source.div, words);
+        repaintRef.current(pageNumber);
       });
+      eventBus.on("textlayerrendered", ({ pageNumber }: { pageNumber: number }) => repaintRef.current(pageNumber));
       viewer.setDocument(pdf);
       linkService.setDocument(pdf);
       viewerRef.current = viewer;
@@ -133,6 +169,34 @@ export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPr
     if (!viewer) return;
     for (let n = 1; n <= viewer.pagesCount; n++) paintHighlights(viewer, n, annotations);
   }, [annotations]);
+
+  useEffect(() => {
+    if (!speechRef) return;
+    speechRef.current = {
+      position: () => (viewerRef.current ? { unit: viewerRef.current.currentPageNumber, offset: 0 } : undefined),
+      show: (unit) => {
+        const viewer = viewerRef.current;
+        if (viewer && viewer.currentPageNumber !== unit) viewer.currentPageNumber = unit;
+      },
+      mark: (spoken) => {
+        const prev = spokenRef.current;
+        spokenRef.current = spoken ? { page: spoken.unit, text: spoken.chunk.text, from: prev?.page === spoken.unit ? prev.end : 0, end: 0 } : undefined;
+        repaintRef.current();
+      },
+      // Scanned pages have no text until recognised; recognise the page about to be read first
+      textOf: async (unit) => {
+        if (!doc.scanned) return undefined;
+        const words = await ocrRef.current.ensure(unit);
+        return words && ocrText(words);
+      },
+    };
+    return () => void (speechRef.current = null);
+  }, [speechRef]);
+
+  useEffect(() => {
+    const page = pdfPage(goTo?.anchor);
+    if (page && viewerRef.current) viewerRef.current.currentPageNumber = page;
+  }, [goTo]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -174,7 +238,9 @@ export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPr
     const x = (e.clientX - box.left) / box.width;
     const y = (e.clientY - box.top) / box.height;
     const hit = onPage(annotations, Number((pageEl as HTMLElement).dataset.pageNumber)).find((a) => a.anchor.rects.some((r) => containsPoint(r, x, y)));
-    if (hit) onAnnotationClick(hit.id);
+    if (!hit) return;
+    e.preventDefault(); // opening a highlight doesn't also toggle the reader bars
+    onAnnotationClick(hit.id);
   }
 
   useEffect(() => {
@@ -191,10 +257,16 @@ export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPr
   // nextPage/previousPage step a whole spread in side-by-side mode
   const next = () => viewerRef.current?.nextPage();
   const prev = () => viewerRef.current?.previousPage();
-  function handleKey(e: KeyboardEvent) {
-    if (e.key === "ArrowRight" || e.key === "PageDown") (e.preventDefault(), next());
-    if (e.key === "ArrowLeft" || e.key === "PageUp") (e.preventDefault(), prev());
-  }
+  // On the window, not the container: arrows turn pages without first clicking into the book
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.defaultPrevented || (e.target as Element).closest?.("input, textarea, [role=combobox], [role=dialog], [contenteditable]")) return;
+      if (e.key === "ArrowRight" || e.key === "PageDown") (e.preventDefault(), viewerRef.current?.nextPage());
+      if (e.key === "ArrowLeft" || e.key === "PageUp") (e.preventDefault(), viewerRef.current?.previousPage());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <ReaderChrome
@@ -220,7 +292,7 @@ export function PdfReader({ doc, bytes, initial, prefs, annotations, tools, onPr
       {error ? (
         <p className="alert" role="alert">{error}</p>
       ) : (
-        <div ref={containerRef} className={`pdf-container layout-${layout}`} tabIndex={0} onClick={handleClick} onKeyDown={handleKey}>
+        <div ref={containerRef} className={`pdf-container layout-${layout}`} tabIndex={0} onClick={handleClick}>
           <div className="pdfViewer" />
         </div>
       )}

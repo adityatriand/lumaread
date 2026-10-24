@@ -1,5 +1,6 @@
 import { Share2, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { confirmDanger } from "../../components/ConfirmDialog";
 import { HIGHLIGHT_COLORS, type Annotation } from "../../lib/db";
 
 interface Props {
@@ -20,6 +21,14 @@ export function AnnotationEditor({ annotation, onSave, onDelete, onClose, onShar
     onClose();
   }
 
+  async function remove() {
+    const what = quote ? "highlight" : "note";
+    const detail = quote && annotation.note ? " and its note" : "";
+    if (!(await confirmDanger(`Delete this ${what}?`, `The ${what}${detail} is removed from this device and, at the next sync, from your other devices.`))) return;
+    onDelete(annotation);
+    onClose();
+  }
+
   return (
     <div className="backdrop" onClick={save}>
       <div className="dialog" role="dialog" aria-modal="true" aria-label={quote ? "Edit highlight" : "Edit note"} onClick={(e) => e.stopPropagation()}>
@@ -36,7 +45,7 @@ export function AnnotationEditor({ annotation, onSave, onDelete, onClose, onShar
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={4} autoFocus={!quote} placeholder="Write your thoughts…" />
         </label>
         <div className="dialog-actions">
-          <button className="danger-button" onClick={() => (onDelete(annotation), onClose())}><Trash2 size={16} /> Delete</button>
+          <button className="danger-button" onClick={remove}><Trash2 size={16} /> Delete</button>
           <div className="header-actions">
             {quote && onShare && <button className="button" onClick={() => (save(), onShare({ ...annotation, color, note: note.trim() || undefined }))}><Share2 size={16} /> Share</button>}
             <button className="button primary" onClick={save}>Done</button>

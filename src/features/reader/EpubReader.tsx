@@ -1,5 +1,5 @@
 import serifFont from "@fontsource-variable/source-serif-4/files/source-serif-4-latin-wght-normal.woff2?url";
-import ePub, { type Contents, type NavItem, type Rendition } from "epubjs";
+import ePub, { EpubCFI, type Contents, type NavItem, type Rendition } from "epubjs";
 import { useEffect, useRef, useState } from "react";
 import { epubAnchor, epubTarget, quoteIn } from "../../lib/anchor";
 import { patchDoc, type HighlightColor } from "../../lib/db";
@@ -18,7 +18,8 @@ const HL_FILL: Record<HighlightColor, string> = { yellow: "#facc15", green: "#4a
 const RENDITION: Record<Layout, object> = {
   continuous: { flow: "scrolled", manager: "continuous" },
   spread: { flow: "paginated", spread: "always", minSpreadWidth: 0 },
-  horizontal: { flow: "paginated", spread: "none" },
+  // The continuous manager is the one epub.js gives swipe snapping: one page per swipe instead of free scrolling
+  horizontal: { flow: "paginated", spread: "none", manager: "continuous", snap: true },
 };
 
 const PAGE_CHARS = 1600; // about one printed paperback page
@@ -48,7 +49,19 @@ function applyPrefs(rendition: Rendition, p: ReadingPrefs) {
   rendition.themes.override("line-height", String(LINE_HEIGHTS[p.lineSpacing]), true);
 }
 
-export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
+// DOM position of a character offset in a chapter's text (the texts store holds body.textContent)
+function pointAt(doc: Document, offset: number): { node: Node; offset: number } | undefined {
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+  let rest = offset;
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const len = n.textContent!.length;
+    if (rest <= len) return { node: n, offset: rest };
+    rest -= len;
+  }
+  return undefined;
+}
+
+export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tools, speechRef, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
   const viewRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition>(null);
   const drawnRef = useRef(new Map<string, string>()); // annotation id → cfiRange|color currently drawn
@@ -101,6 +114,10 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
         settle = setTimeout(() => reportSelection(contents), 250); // let drag handles and double-clicks settle
       };
       for (const type of ["selectionchange", "mouseup", "touchend", "keyup"]) contents.document.addEventListener(type, check);
+      // Taps inside the chapter iframe don't reach the reader; replay plain ones on the host so the bars toggle
+      contents.document.addEventListener("click", (e) => {
+        if (!(e.target as Element).closest?.("a") && contents.window.getSelection()?.isCollapsed !== false) viewRef.current?.click();
+      });
     });
     applyPrefs(rendition, prefs);
 
@@ -199,6 +216,76 @@ export function EpubReader({ doc, bytes, initial, prefs, annotations, tools, onP
   useEffect(() => {
     if (renditionRef.current) applyPrefs(renditionRef.current, prefs);
   }, [prefs]);
+
+  const spokenCfi = useRef<string>(undefined); // read-aloud mark currently drawn
+
+  useEffect(() => {
+    if (!speechRef) return;
+    type Loc = { start: { index: number; cfi: string }; end: { cfi: string } };
+    const location = () => {
+      const loc = renditionRef.current?.currentLocation() as unknown as Loc | undefined;
+      return loc?.start ? loc : undefined; // {} until the first page is shown
+    };
+    const contentsOf = (index: number) =>
+      (renditionRef.current?.getContents() as unknown as (Contents & { sectionIndex: number })[] | undefined)?.find((c) => c.sectionIndex === index);
+    speechRef.current = {
+      position() {
+        const loc = location();
+        if (!loc) return undefined;
+        const contents = contentsOf(loc.start.index);
+        try {
+          // Offset of the first visible character within the chapter's text (what the texts store holds)
+          const at = (contents as unknown as { range: (cfi: string) => Range }).range(loc.start.cfi);
+          const before = contents!.document.createRange();
+          before.setStart(contents!.document.body, 0);
+          before.setEnd(at.startContainer, at.startOffset);
+          return { unit: loc.start.index, offset: before.toString().length };
+        } catch {
+          return { unit: loc.start.index, offset: 0 };
+        }
+      },
+      show(unit, offset) {
+        const rendition = renditionRef.current;
+        const loc = location();
+        if (!rendition || !loc) return;
+        const contents = contentsOf(unit);
+        if (!contents) return void rendition.display(unit);
+        // Text offset → the DOM text node holding it → a CFI epub.js can display
+        const at = pointAt(contents.document, offset);
+        if (!at) return;
+        const range = contents.document.createRange();
+        range.setStart(at.node, at.offset);
+        const cfi = contents.cfiFromRange(range);
+        const compare = new EpubCFI();
+        if (compare.compare(cfi, loc.start.cfi) < 0 || compare.compare(cfi, loc.end.cfi) > 0) rendition.display(cfi);
+      },
+      mark(spoken) {
+        const rendition = renditionRef.current;
+        if (!rendition) return;
+        if (spokenCfi.current) rendition.annotations.remove(spokenCfi.current, "highlight");
+        spokenCfi.current = undefined;
+        const contents = spoken && contentsOf(spoken.unit);
+        const start = contents && pointAt(contents.document, spoken!.chunk.start);
+        const end = contents && pointAt(contents.document, spoken!.chunk.end);
+        if (!contents || !start || !end) return;
+        const range = contents.document.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+        spokenCfi.current = contents.cfiFromRange(range);
+        rendition.annotations.highlight(spokenCfi.current, {}, () => undefined, "speak-mark", {
+          fill: "#5b5bd6",
+          "fill-opacity": prefsRef.current.theme === "dark" ? "0.4" : "0.22",
+          "mix-blend-mode": prefsRef.current.theme === "dark" ? "screen" : "multiply", // multiply vanishes on a dark page
+        });
+      },
+    };
+    return () => void (speechRef.current = null);
+  }, [speechRef]);
+
+  useEffect(() => {
+    const target = epubTarget(goTo?.anchor);
+    if (target) renditionRef.current?.display(target);
+  }, [goTo]);
 
   // Diff drawn highlights against the list: epub.js keeps them per rendition and re-applies on page turns
   useEffect(() => {

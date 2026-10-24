@@ -20,8 +20,8 @@ export const isPhone = () => /Android|iPhone|iPad/i.test(navigator.userAgent) ||
 
 // Each device offers its own pair of layouts; a value saved on the other kind of device falls back to scrolling
 export const LAYOUTS: { value: Layout; label: string }[] = isPhone()
-  ? [{ value: "continuous", label: "Scroll up–down" }, { value: "horizontal", label: "Swipe left–right" }]
-  : [{ value: "continuous", label: "Continuous scroll" }, { value: "spread", label: "Side by side" }];
+  ? [{ value: "continuous", label: "Scroll" }, { value: "horizontal", label: "Swipe" }]
+  : [{ value: "continuous", label: "Scroll" }, { value: "spread", label: "Side" }];
 
 export const effectiveLayout = (l: Layout): Layout => (LAYOUTS.some((o) => o.value === l) ? l : "continuous");
 

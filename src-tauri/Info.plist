@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Shown by macOS 15+ the first time Sync looks for your other devices -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>LumaRead finds your other devices on this Wi-Fi to sync books, progress, highlights and notes.</string>
+</dict>
+</plist>

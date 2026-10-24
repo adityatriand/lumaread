@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Copy, Download, Share2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { saveBinaryFile } from "../../lib/saveFile";
+import type { ChartStyle } from "../stats/achievementCard";
 import { CARD_THEMES, toPngBlob, type CardFormat, type CardTheme } from "./quoteCard";
 
 interface Props {
@@ -9,7 +10,8 @@ interface Props {
   alt: string; // describes the image for screen readers
   caption: string; // sent as text alongside the image where the target app accepts it
   fileBase: string;
-  render: (format: CardFormat, theme: CardTheme) => Promise<HTMLCanvasElement>;
+  chart?: boolean; // offer Bar / Line for cards that draw a chart (story format only)
+  render: (format: CardFormat, theme: CardTheme, chart: ChartStyle) => Promise<HTMLCanvasElement>;
   onClose: () => void;
 }
 
@@ -23,24 +25,25 @@ async function base64(blob: Blob) {
   return btoa(binary);
 }
 
-export function ShareImageDialog({ heading, alt, caption, fileBase, render, onClose }: Props) {
+export function ShareImageDialog({ heading, alt, caption, fileBase, chart, render, onClose }: Props) {
   const [format, setFormat] = useState<CardFormat>("story");
   const [theme, setTheme] = useState<CardTheme>("luma");
+  const [chartStyle, setChartStyle] = useState<ChartStyle>("bar");
   const [card, setCard] = useState<{ url: string; blob: Blob }>();
   const [status, setStatus] = useState<string>();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let current = true;
-    render(format, theme)
+    render(format, theme, chartStyle)
       .then(toPngBlob)
       .then((blob) => current && setCard({ url: URL.createObjectURL(blob), blob }))
       .catch(() => current && setStatus("Could not create the image."));
     return () => {
       current = false;
     };
-    // render is recreated by callers each render; the card only depends on format and theme here
-  }, [format, theme]);
+    // render is recreated by callers each render; the card only depends on these choices here
+  }, [format, theme, chartStyle]);
 
   // Free each preview's object URL once it is replaced or the dialog closes
   useEffect(() => () => card && URL.revokeObjectURL(card.url), [card]);
@@ -91,6 +94,15 @@ export function ShareImageDialog({ heading, alt, caption, fileBase, render, onCl
               </button>
             ))}
           </div>
+          {chart && format === "story" && (
+            <div className="segmented" role="radiogroup" aria-label="Chart">
+              {(["bar", "line"] as const).map((c) => (
+                <button key={c} role="radio" aria-checked={chartStyle === c} aria-pressed={chartStyle === c} onClick={() => setChartStyle(c)}>
+                  {c === "bar" ? "Bar" : "Line"}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="color-row" role="radiogroup" aria-label="Style">
             {(Object.keys(CARD_THEMES) as CardTheme[]).map((t) => (
               <button

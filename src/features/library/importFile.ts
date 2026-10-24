@@ -1,6 +1,7 @@
 import ePub from "epubjs";
 import type { PDFPageProxy } from "pdfjs-dist";
 import { addDoc, findByHash, type DocMeta, type Format } from "../../lib/db";
+import { sha256Hex } from "../../lib/hash";
 import { openPdf } from "../../lib/pdf";
 import { detectFormat } from "./detectFormat";
 import { titleFromName } from "./titleFromName";
@@ -10,11 +11,6 @@ const MAX_BYTES = 200 * 1024 * 1024;
 const COVER_WIDTH = 160;
 
 interface Extracted { title?: string; author?: string; cover?: string }
-
-async function sha256(buf: ArrayBuffer) {
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 function canvasOf(width: number, height: number) {
   const canvas = document.createElement("canvas");
@@ -70,7 +66,7 @@ export async function importFile(file: File): Promise<DocMeta> {
   const format = detectFormat(new Uint8Array(buf), file.name);
   if (!format) throw new Error(`"${file.name}" is not a supported EPUB or PDF file.`);
 
-  const hash = await sha256(buf);
+  const hash = await sha256Hex(buf);
   const existing = await findByHash(hash);
   if (existing) throw new Error(`"${existing.title}" is already in your library.`);
 

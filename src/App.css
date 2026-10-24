@@ -203,20 +203,65 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); }
 
 /* Reader */
-.reader { display: flex; flex-direction: column; height: 100%; position: relative; --page-bg: #ffffff; }
+.reader { display: flex; flex-direction: column; height: 100%; position: relative; --page-bg: #ffffff; background: var(--page-bg); }
 .reader.theme-dark { --page-bg: #16161d; }
 .reader.theme-sepia { --page-bg: #f6efdf; }
 .reader-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--surface); border-bottom: 1px solid var(--border); }
 .reader-bar.footer { justify-content: center; gap: 24px; border-bottom: 0; border-top: 1px solid var(--border); padding-top: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
 :root.mac .reader-bar:not(.footer) { padding-left: 84px; padding-top: 10px; min-height: 52px; }
+/* Book first: the bars float over the page and fade out; a tap on the page brings them back (hover too, on desktop) */
+.reader-top, .reader-bar.footer { position: absolute; left: 0; right: 0; z-index: 15; transition: opacity 0.2s, transform 0.2s; }
+.reader-top { top: 0; }
+.reader-bar.footer { bottom: 0; }
+.reader:not(.bars-on) .reader-top { opacity: 0; transform: translateY(-6px); }
+.reader:not(.bars-on) .reader-bar.footer { opacity: 0; transform: translateY(6px); }
+.reader-top:is(:hover, :focus-within), .reader-bar.footer:is(:hover, :focus-within) { opacity: 1 !important; transform: none !important; }
+/* Touch screens can't hover, so hidden bars must not swallow taps meant for the page */
+@media (hover: none) { .reader:not(.bars-on) :is(.reader-top, .reader-bar.footer) { pointer-events: none; } }
+@media (prefers-reduced-motion: reduce) { .reader-top, .reader-bar.footer { transition: none; } }
 .reader-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .reader-heading h1 { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reader-bar select { max-width: 160px; }
-.reader-body { flex: 1; position: relative; min-height: 0; background: var(--page-bg); }
-.pdf-container { position: absolute; inset: 0; overflow: auto; background: var(--surface-2); }
+.reader-body { flex: 1; position: relative; min-height: 0; margin: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+:root.mac .reader-body { margin-top: 28px; } /* keeps the window buttons off the text */
+.pdf-container { position: absolute; inset: 0; overflow: auto; }
+/* Swipe turns exactly one page: each page snaps to the centre and a fling can't skip past it */
+.pdf-container.layout-horizontal { scroll-snap-type: x mandatory; }
+.pdf-container.layout-horizontal .page { scroll-snap-align: center; scroll-snap-stop: always; }
 /* Not ".epub-view": epub.js gives each chapter wrapper that class, and this padding would squeeze them to 0 width */
 .book-view { height: 100%; max-width: 980px; margin: 0 auto; padding: 24px 24px 0; }
-.popover { position: absolute; right: 12px; top: 60px; z-index: 20; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 32px rgb(20 20 50 / 0.15); padding: 16px; width: min(320px, calc(100% - 24px)); }
+.popover { position: absolute; right: 12px; top: calc(100% + 4px); z-index: 20; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 32px rgb(20 20 50 / 0.15); padding: 16px; width: min(340px, calc(100% - 24px)); }
+.popover .segmented.wide { width: 100%; }
+.popover .segmented.wide > * { flex: 1; justify-content: center; }
+.popover .theme-options { flex-wrap: nowrap; }
+.popover .theme-option { flex: 1; min-width: 0; justify-content: center; padding: 8px; }
+
+/* Reading timer: stays visible while the bars hide, faint until hovered; a tap pauses or resumes */
+.reading-timer { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 16; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; opacity: 0.7; }
+.reading-timer:hover, .reading-timer:focus-visible { opacity: 1; }
+.reading-timer.paused { color: var(--accent); border-color: var(--accent); opacity: 1; }
+.timer-state { font-weight: 600; }
+/* Read-aloud player: bottom left, clear of the timer on the right */
+.read-aloud-bar { position: fixed; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 16; display: flex; align-items: center; gap: 2px; max-width: calc(100% - 140px); padding: 2px 12px 2px 4px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); font-size: 0.85rem; }
+.read-aloud-bar .rate { min-width: 44px; min-height: 32px; padding: 0 8px; border: 0; background: var(--accent-soft); color: var(--accent); border-radius: 999px; font-variant-numeric: tabular-nums; }
+.read-aloud-where { margin-left: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+/* Sentence being read aloud (PDF); EPUB draws the same tint through epub.js */
+.speak-layer { pointer-events: none; z-index: 1; }
+.speak-mark { position: absolute; background: var(--accent); opacity: 0.22; mix-blend-mode: multiply; border-radius: 3px; }
+.reader.theme-dark .speak-mark { mix-blend-mode: screen; opacity: 0.4; }
+/* Ribbon on the page while the current place is bookmarked */
+.bookmark-ribbon { position: fixed; top: env(safe-area-inset-top); right: 32px; z-index: 14; width: 18px; height: 34px; background: var(--accent); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%); pointer-events: none; }
+:root.mac .bookmark-ribbon { top: 0; }
+.popover.bookmarks { display: grid; gap: 12px; }
+.bookmark-add { display: flex; gap: 8px; }
+.bookmark-add input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+.bookmark-add input:focus { outline: 0; border-color: var(--accent); }
+.bookmark-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; display: grid; gap: 2px; }
+.bookmark-list li { display: flex; align-items: center; gap: 4px; }
+.bookmark-go { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: none; border: 0; border-radius: 8px; padding: 6px 8px; }
+.bookmark-go:hover { background: var(--surface-2); }
+.bookmark-go > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-button .accent { color: var(--accent); }
 
 /* Highlights */
 :root { --hl-yellow: #facc15; --hl-green: #4ade80; --hl-blue: #60a5fa; --hl-pink: #f472b6; }
@@ -245,6 +290,29 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .text-input:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
 .field textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; resize: vertical; }
 .dialog-actions { display: flex; justify-content: space-between; }
+/* Sync */
+.sync-device { display: grid; gap: 10px; }
+.sync-device input { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; max-width: 320px; }
+.sync-status { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: 0.9rem; }
+.sync-status.ready { color: var(--accent); }
+.sync-status.failed { color: var(--danger); }
+.sync-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.sync-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.sync-list li:last-child { border-bottom: 0; }
+.sync-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sync-result { margin: 0; }
+.pair-code { margin: 4px 0; text-align: center; font-size: 2.2rem; font-weight: 700; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
+.spin { animation: spin 0.8s linear infinite; }
+@media (max-width: 760px) { .sync-list li { flex-wrap: wrap; } .sync-list li .button { margin-left: 32px; } }
+
+/* Confirmation before anything that deletes data: above every other dialog */
+.confirm-backdrop { z-index: 60; }
+.confirm-dialog { width: min(420px, 100%); }
+.confirm-dialog h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.1rem; }
+.confirm-dialog h2 svg { color: var(--danger); flex: none; }
+.confirm-dialog p { margin: 0; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .danger-button { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); border-color: transparent; background: none; }
 .toast.info { color: var(--text); }
 
@@ -356,10 +424,11 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
   .settings-nav .nav-item { flex: none; }
 }
 
-/* PDF page colour: canvases can't take a text colour, so tint (sepia) or invert (dark, hue kept so images look natural) */
-.reader.theme-sepia .pdfViewer .canvasWrapper canvas { filter: sepia(0.35) saturate(1.1) brightness(0.97); }
+/* PDF page colour: canvases can't take a text colour. Sepia multiplies the page over the paper colour (white paper
+   becomes exactly the surrounding sepia, ink stays dark); dark inverts, hue kept so images look natural */
+.reader .pdfViewer { --page-bg-color: var(--page-bg); }
+.reader.theme-sepia .pdfViewer .canvasWrapper canvas { mix-blend-mode: multiply; }
 .reader.theme-dark .pdfViewer .canvasWrapper canvas { filter: invert(0.9) hue-rotate(180deg); }
-.reader.theme-dark .pdfViewer .page { background: #16161d; }
 .reader.theme-dark .hl { mix-blend-mode: screen; opacity: 0.45; }
 
 /* Custom select */

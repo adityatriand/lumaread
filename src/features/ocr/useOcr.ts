@@ -13,6 +13,7 @@ export function useOcr(docId: string, enabled: boolean, onPageReady: (page: numb
   const running = useRef(false);
   const alive = useRef(true);
   const readyRef = useRef(onPageReady);
+  const waiters = useRef(new Map<number, ((words?: OcrWord[]) => void)[]>()); // ensure() calls waiting on a page
   const [status, setStatus] = useState<OcrStatus>({ recognized: 0, total: 0, wholeBook: false });
 
   readyRef.current = onPageReady;
@@ -29,6 +30,8 @@ export function useOcr(docId: string, enabled: boolean, onPageReady: (page: numb
     return () => {
       alive.current = false;
       queue.current = [];
+      for (const list of waiters.current.values()) list.forEach((resolve) => resolve(undefined));
+      waiters.current.clear();
     };
   }, [docId, enabled]);
 
@@ -46,6 +49,8 @@ export function useOcr(docId: string, enabled: boolean, onPageReady: (page: numb
       } catch {
         setStatus((s) => ({ ...s, failed: true }));
       }
+      waiters.current.get(n)?.forEach((resolve) => resolve(cache.current.get(n)));
+      waiters.current.delete(n);
       setStatus((s) => ({ ...s, recognized: cache.current.size, busyPage: undefined }));
     }
     running.current = false;
@@ -66,6 +71,16 @@ export function useOcr(docId: string, enabled: boolean, onPageReady: (page: numb
       const fresh = pages.filter((p) => p >= 1 && !cache.current.has(p) && p <= (pdfRef.current?.numPages ?? Infinity));
       queue.current = [...fresh, ...queue.current.filter((p) => !fresh.includes(p))];
       drain();
+    },
+    // Words for a page, recognising it first (ahead of the queue) if needed; undefined if recognition fails
+    ensure(page: number): Promise<OcrWord[] | undefined> {
+      const cached = cache.current.get(page);
+      if (cached || !enabled) return Promise.resolve(cached);
+      return new Promise((resolve) => {
+        waiters.current.set(page, [...(waiters.current.get(page) ?? []), resolve]);
+        queue.current = [page, ...queue.current.filter((p) => p !== page)];
+        drain();
+      });
     },
     recognizeAll() {
       const total = pdfRef.current?.numPages ?? 0;

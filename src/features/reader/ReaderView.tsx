@@ -1,16 +1,23 @@
-import { useEffect, useState } from "react";
-import { deleteAnnotation, listAnnotations, saveAnnotation, type Annotation, type HighlightColor } from "../../lib/db";
+import { Headphones } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { confirmDanger } from "../../components/ConfirmDialog";
+import type { Anchor } from "../../lib/anchor";
+import { deleteAnnotation, deleteBookmark, listAnnotations, listBookmarks, saveAnnotation, saveBookmark, type Annotation, type Bookmark, type HighlightColor } from "../../lib/db";
 import { LookupPanel } from "../lookup/LookupPanel";
 import { ShareQuoteDialog } from "../share/ShareQuoteDialog";
+import { ReadAloudBar } from "../readaloud/ReadAloudBar";
+import { useReadAloud } from "../readaloud/useReadAloud";
+import { ReadingTimer } from "../stats/ReadingTimer";
 import { useReadingSession } from "../stats/useReadingSession";
 import { AnnotationEditor } from "../notebook/AnnotationEditor";
 import { citation } from "../notebook/citation";
+import { BookmarkMenu } from "./BookmarkMenu";
 import { EpubReader } from "./EpubReader";
 import { PdfReader } from "./PdfReader";
 import { SelectionToolbar } from "./SelectionToolbar";
-import type { ReaderProps, TextSelection } from "./types";
+import type { ReaderProps, SpeechBridge, TextSelection } from "./types";
 
-type Props = Omit<ReaderProps, "annotations" | "onSelect" | "onAnnotationClick" | "tools">;
+type Props = Omit<ReaderProps, "annotations" | "onSelect" | "onAnnotationClick" | "tools" | "goTo" | "speechRef">;
 
 export function ReaderView(props: Props) {
   const { doc } = props;
@@ -21,10 +28,35 @@ export function ReaderView(props: Props) {
   const [message, setMessage] = useState<string>();
   const [lookup, setLookup] = useState<string>();
   const [sharing, setSharing] = useState<{ quote: string; location?: string }>();
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [here, setHere] = useState<{ anchor: Anchor; label: string }>();
+  const [goTo, setGoTo] = useState<{ anchor: Anchor }>();
+  const speechRef = useRef<SpeechBridge>(null);
+  // Listening counts as reading for the timer, even with no input
+  const player = useReadAloud(doc.id, speechRef, session.touch, setMessage);
 
   useEffect(() => {
     listAnnotations(doc.id).then(setAnnotations, () => setMessage("Highlights could not be loaded."));
+    listBookmarks(doc.id).then(setBookmarks, () => setMessage("Bookmarks could not be loaded."));
   }, [doc.id]);
+
+  async function addBookmark(name: string) {
+    if (!here) return;
+    const b: Bookmark = { id: crypto.randomUUID(), docId: doc.id, anchor: here.anchor, label: here.label, name: name || here.label, createdAt: Date.now() };
+    try {
+      await saveBookmark(b);
+      setBookmarks((list) => [...list, b]);
+      setMessage("Bookmark saved.");
+    } catch {
+      setMessage("Could not save. Your device storage may be full.");
+    }
+  }
+
+  async function removeBookmark(id: string) {
+    const b = bookmarks.find((x) => x.id === id);
+    if (!b || !(await confirmDanger(`Delete the bookmark “${b.name}”?`, "It's removed from this device and, at the next sync, from your other devices."))) return;
+    deleteBookmark(id).then(() => setBookmarks((list) => list.filter((b) => b.id !== id)), () => setMessage("Could not delete."));
+  }
 
   useEffect(() => {
     if (!message) return;
@@ -64,13 +96,30 @@ export function ReaderView(props: Props) {
   }
 
   const Reader = doc.format === "pdf" ? PdfReader : EpubReader;
+  const marked = !!here && bookmarks.some((b) => b.label === here.label);
 
   return (
     <>
       <Reader
         {...props}
+        goTo={goTo}
+        speechRef={speechRef}
+        tools={
+          <>
+            <button
+              className="icon-button"
+              aria-label={player.state === "off" ? "Read aloud" : "Stop reading aloud"}
+              aria-pressed={player.state !== "off"}
+              onClick={player.state === "off" ? player.play : player.stop}
+            >
+              <Headphones size={20} className={player.state !== "off" ? "accent" : undefined} />
+            </button>
+            <BookmarkMenu bookmarks={bookmarks} here={here} onAdd={addBookmark} onDelete={removeBookmark} onGo={(b) => setGoTo({ anchor: b.anchor })} />
+          </>
+        }
         onLocation={(anchor, percent, label) => {
           session.location(JSON.stringify(anchor), percent);
+          setHere({ anchor, label });
           props.onLocation(anchor, percent, label);
         }}
         annotations={annotations}
@@ -104,6 +153,9 @@ export function ReaderView(props: Props) {
         />
       )}
       {sharing && <ShareQuoteDialog {...sharing} title={doc.title} author={doc.author} onClose={() => setSharing(undefined)} />}
+      {marked && <div className="bookmark-ribbon" aria-hidden="true" />}
+      <ReadingTimer docId={doc.id} session={session} />
+      <ReadAloudBar player={player} location={here?.label} />
       {message && <div className="toast info" role="status">{message}</div>}
     </>
   );

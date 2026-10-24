@@ -1,4 +1,4 @@
-import { bookFrame, expect, idb, importAll, invokedCalls, row, selectText, test, setPrefs, choose } from "./helpers";
+import { bookFrame, choose, confirmModal, expect, idb, importAll, invokedCalls, row, selectText, setPrefs, test } from "./helpers";
 
 test("PDF: highlight a selection, keep it after reload, edit its note", async ({ page }) => {
   await importAll(page);
@@ -27,6 +27,19 @@ test("PDF: highlight a selection, keep it after reload, edit its note", async ({
   await page.getByRole("dialog", { name: "Edit highlight" }).getByRole("textbox").fill("Greeting line");
   await page.getByRole("button", { name: "Done" }).click();
   await expect.poll(async () => (await idb<{ note?: string }>(page, "annotations"))[0].note).toBe("Greeting line");
+
+  // Deleting asks first; a deletion leaves a tombstone so sync removes it on other devices too
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const editor = page.getByRole("dialog", { name: "Edit highlight" });
+  await editor.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("Delete this highlight?");
+  await confirmModal(page, "Cancel");
+  await expect(editor).toBeVisible();
+  await editor.getByRole("button", { name: "Delete" }).click();
+  await confirmModal(page, "Delete");
+  await expect(page.locator(".page[data-page-number='1'] .hl")).toHaveCount(0);
+  expect(await idb(page, "annotations")).toHaveLength(0);
+  expect(await idb<{ kind: string }>(page, "tombstones")).toMatchObject([{ kind: "annotation" }]);
 });
 
 test("EPUB: highlight inside the book and jump back to it from the notebook", async ({ page }) => {

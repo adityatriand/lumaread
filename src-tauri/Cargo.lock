@@ -1735,7 +1735,9 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
+ "tauri-plugin-lansync",
  "tauri-plugin-quoteshare",
+ "tauri-plugin-readaloud",
 ]
 
 [[package]]
@@ -3245,7 +3247,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-lansync"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
 name = "tauri-plugin-quoteshare"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
+name = "tauri-plugin-readaloud"
 version = "0.1.0"
 dependencies = [
  "serde",

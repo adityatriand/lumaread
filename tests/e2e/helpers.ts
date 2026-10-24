@@ -98,3 +98,11 @@ export async function choose(page: Page, label: string, option: string) {
   await page.getByRole("combobox", { name: label, exact: true }).click();
   await page.getByRole("listbox", { name: label }).getByRole("option", { name: option, exact: true }).click();
 }
+
+// Answers the app's own confirmation dialog (shown before anything that deletes data)
+export async function confirmModal(page: Page, action: string) {
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: action, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+}

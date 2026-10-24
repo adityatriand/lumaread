@@ -59,6 +59,7 @@ export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
     streak: streak.current,
     daysRead: summary.daysRead,
     daily: daily.map((d) => d.ms),
+    days: daily.map((d) => d.day),
   };
 
   return (
@@ -161,7 +162,8 @@ export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
           alt={`Reading achievement: ${achievementCaption(achievement)}`}
           caption={achievementCaption(achievement)}
           fileBase="lumaread-achievement"
-          render={(format, theme) => renderAchievement(achievement, format, theme)}
+          chart
+          render={(format, theme, chart) => renderAchievement(achievement, format, theme, chart)}
           onClose={() => setSharing(false)}
         />
       )}

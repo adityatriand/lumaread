@@ -1,4 +1,4 @@
-import { bookFrame, expect, fixture, idb, importAll, row, test, setPrefs, choose } from "./helpers";
+import { bookFrame, choose, confirmModal, expect, fixture, idb, importAll, row, setPrefs, test } from "./helpers";
 
 test("a plain browser gets only the app-only screen", async ({ browser }) => {
   const web = await browser.newPage();
@@ -58,9 +58,16 @@ test("EPUB: blocks book scripts, navigates chapters, restores location and prefs
 
 test("removing a document deletes its stored file", async ({ page }) => {
   await importAll(page);
-  page.on("dialog", (d) => d.accept());
+  // Cancel keeps everything
   await page.getByLabel("More actions for Smoke PDF").click();
   await page.getByRole("button", { name: "Remove from device" }).click();
+  await confirmModal(page, "Cancel");
+  await expect(page.locator(".doc-row")).toHaveCount(2);
+
+  await page.getByLabel("More actions for Smoke PDF").click();
+  await page.getByRole("button", { name: "Remove from device" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("Remove “Smoke PDF”?");
+  await confirmModal(page, "Remove");
   await expect(page.locator(".doc-row")).toHaveCount(1);
 
   expect(await idb(page, "files")).toHaveLength(1);
@@ -90,4 +97,24 @@ test("upgrading from DB v1 moves old progress into versioned anchors", async ({ 
   await expect(row(page, "Old PDF")).toContainText("50%");
   const [progress] = await idb(page, "progress");
   expect(progress).toMatchObject({ anchor: { v: 1, kind: "pdf", page: 2 }, percent: 0.5, version: 1 });
+});
+
+test("reset progress starts the book over", async ({ page }) => {
+  await importAll(page);
+  await row(page, "Smoke PDF").click();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await idb<{ anchor: { page: number } }>(page, "progress")).map((p) => p.anchor.page)).toContain(3);
+  await page.getByLabel("Back to library").click();
+  await expect(page.getByRole("heading", { name: "Continue reading" })).toBeVisible();
+
+  await page.getByLabel("More actions for Smoke PDF").first().click();
+  await page.getByRole("button", { name: "Reset progress" }).click();
+  await confirmModal(page, "Reset");
+  await expect(page.getByRole("heading", { name: "Continue reading" })).toHaveCount(0);
+  await expect(row(page, "Smoke PDF")).toContainText("Not started");
+  expect(await idb(page, "progress")).toHaveLength(0);
+
+  await row(page, "Smoke PDF").click();
+  await expect(page.locator(".reader-bar.footer")).toContainText("Page 1 / 3");
 });

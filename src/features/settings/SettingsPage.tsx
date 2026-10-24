@@ -72,9 +72,10 @@ export function SettingsPage({ prefs, onChange }: Props) {
             <>
               <h2>Privacy</h2>
               <p className="muted">
-                Your files, highlights, reading progress and settings are stored only on this device. Text recognition, dictionary
-                and translation also run on this device — nothing is uploaded. Uninstalling the app removes your library, so export
-                your highlights and notes to keep a copy.
+                Your files, highlights, reading progress and settings are stored on this device. Text recognition, dictionary
+                and translation also run on this device — nothing is uploaded. Sync only talks to devices you paired, directly over
+                your Wi-Fi and encrypted, and only while its page is open. Uninstalling the app removes your library, so export
+                your highlights and notes (or sync another device) to keep a copy.
               </p>
             </>
           )}

@@ -19,6 +19,7 @@ export interface DocMeta {
   pageCount?: number; // PDF pages, set when indexed
   scanned?: boolean; // PDF whose pages are mostly images without a text layer
   indexFailed?: boolean; // text extraction threw; not retried automatically
+  editedAt?: number; // title/author changed by the reader; newest edit wins in sync
 }
 
 export interface Progress {
@@ -68,6 +69,36 @@ export interface Session {
   endPercent: number;
 }
 
+// A saved place in a book, named by the reader ("where the detective arrives")
+export interface Bookmark {
+  id: string;
+  docId: string;
+  anchor: Anchor;
+  label: string; // location when saved, "Page 6 / 277" or "Chapter 2 · Page 31 / 240"
+  name: string;
+  createdAt: number;
+  updatedAt?: number; // set on rename
+}
+
+// Remembers a deletion so sync removes the record on the other device instead of copying it back.
+// "doc" marks a book removed from this device only: sync won't copy it back here, and never deletes it elsewhere.
+export type TombstoneKind = "annotation" | "bookmark" | "progress" | "doc";
+export interface Tombstone {
+  key: string; // `${kind}:${id}`
+  kind: TombstoneKind;
+  id: string; // record id; the book's hash for "progress" and "doc"
+  deletedAt: number;
+}
+
+// Another device paired for Wi-Fi sync
+export interface PeerDevice {
+  id: string;
+  name: string;
+  key: string; // base64 AES-256 key agreed at pairing
+  pairedAt: number;
+  lastSync?: number;
+}
+
 export interface OcrWord { text: string; box: Rect; line: number }
 export interface OcrPage { docId: string; page: number; words: OcrWord[] }
 
@@ -75,7 +106,7 @@ let dbPromise: Promise<IDBDatabase> | undefined;
 
 function openDb() {
   return (dbPromise ??= new Promise((resolve, reject) => {
-    const r = indexedDB.open("lumaread", 5);
+    const r = indexedDB.open("lumaread", 7);
     r.onupgradeneeded = (e) => {
       const db = r.result;
       if (e.oldVersion < 1) {
@@ -119,6 +150,13 @@ function openDb() {
           cursor.continue();
         };
       }
+      if (e.oldVersion < 6) {
+        db.createObjectStore("bookmarks", { keyPath: "id" }).createIndex("docId", "docId");
+      }
+      if (e.oldVersion < 7) {
+        db.createObjectStore("tombstones", { keyPath: "key" });
+        db.createObjectStore("peers", { keyPath: "id" });
+      }
     };
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
@@ -161,9 +199,48 @@ export const getFile = (id: string) => getOne<ArrayBuffer>("files", id);
 
 export const listAnnotations = (docId?: string) => getAll<Annotation>("annotations", docId);
 export const saveAnnotation = (a: Annotation) => putAll("annotations", [a]);
-export async function deleteAnnotation(id: string) {
-  const t = (await openDb()).transaction("annotations", "readwrite");
-  t.objectStore("annotations").delete(id);
+const tombstone = (kind: TombstoneKind, id: string, deletedAt = Date.now()): Tombstone => ({ key: `${kind}:${id}`, kind, id, deletedAt });
+
+// Deletes and leaves a tombstone in the same transaction
+async function deleteOne(store: string, id: string, kind: TombstoneKind) {
+  const t = (await openDb()).transaction([store, "tombstones"], "readwrite");
+  t.objectStore(store).delete(id);
+  t.objectStore("tombstones").put(tombstone(kind, id));
+  return done(t);
+}
+export const deleteAnnotation = (id: string) => deleteOne("annotations", id, "annotation");
+
+// Progress is keyed by local doc id but synced by book hash, so the tombstone uses the hash
+export async function deleteProgress(docId: string) {
+  const t = (await openDb()).transaction(["docs", "progress", "tombstones"], "readwrite");
+  t.objectStore("docs").get(docId).onsuccess = (e) => {
+    const doc = (e.target as IDBRequest<DocMeta | undefined>).result;
+    t.objectStore("progress").delete(docId);
+    if (doc) t.objectStore("tombstones").put(tombstone("progress", doc.hash));
+  };
+  return done(t);
+}
+
+export const listBookmarks = (docId?: string) => getAll<Bookmark>("bookmarks", docId);
+export const saveBookmark = (b: Bookmark) => putAll("bookmarks", [b]);
+export const deleteBookmark = (id: string) => deleteOne("bookmarks", id, "bookmark");
+
+// Sync writes: records arrive already merged, keyed as stored here (deletions carry their own tombstones)
+type SyncedStore = "progress" | "annotations" | "bookmarks" | "sessions";
+export const putRecords = (store: SyncedStore, list: unknown[]) => putAll(store, list);
+export async function removeRecords(store: SyncedStore, keys: string[]) {
+  const t = (await openDb()).transaction(store, "readwrite");
+  for (const k of keys) t.objectStore(store).delete(k);
+  return done(t);
+}
+
+export const listTombstones = () => getAll<Tombstone>("tombstones");
+export const saveTombstones = (list: Tombstone[]) => putAll("tombstones", list);
+export const listPeers = () => getAll<PeerDevice>("peers");
+export const savePeer = (p: PeerDevice) => putAll("peers", [p]);
+export async function forgetPeer(id: string) {
+  const t = (await openDb()).transaction("peers", "readwrite");
+  t.objectStore("peers").delete(id);
   return done(t);
 }
 
@@ -179,9 +256,10 @@ export async function findByHash(hash: string): Promise<DocMeta | undefined> {
 }
 
 export async function addDoc(meta: DocMeta, bytes: ArrayBuffer) {
-  const t = (await openDb()).transaction(["docs", "files"], "readwrite");
+  const t = (await openDb()).transaction(["docs", "files", "tombstones"], "readwrite");
   t.objectStore("docs").add(meta);
   t.objectStore("files").put(bytes, meta.id);
+  t.objectStore("tombstones").delete(`doc:${meta.hash}`); // importing again undoes a removal
   return done(t);
 }
 
@@ -207,15 +285,19 @@ export async function saveProgress(p: Omit<Progress, "updatedAt" | "version">) {
   return done(t);
 }
 
-const DOC_STORES = ["docs", "files", "progress", "annotations", "texts", "ocr", "sessions"];
+const DOC_STORES = ["docs", "files", "progress", "annotations", "texts", "ocr", "sessions", "bookmarks"];
 
-// Removes the document and everything derived from it in one transaction
+// Removes the document and everything derived from it in one transaction; sync won't copy it back to this device
 export async function deleteDoc(id: string) {
-  const t = (await openDb()).transaction(DOC_STORES, "readwrite");
+  const t = (await openDb()).transaction([...DOC_STORES, "tombstones"], "readwrite");
+  t.objectStore("docs").get(id).onsuccess = (e) => {
+    const doc = (e.target as IDBRequest<DocMeta | undefined>).result;
+    if (doc) t.objectStore("tombstones").put(tombstone("doc", doc.hash));
+  };
   t.objectStore("docs").delete(id);
   t.objectStore("files").delete(id);
   t.objectStore("progress").delete(id);
-  for (const store of ["annotations", "texts", "ocr", "sessions"]) {
+  for (const store of ["annotations", "texts", "ocr", "sessions", "bookmarks"]) {
     t.objectStore(store).index("docId").openKeyCursor(IDBKeyRange.only(id)).onsuccess = (e) => {
       const cursor = (e.target as IDBRequest<IDBCursor | null>).result;
       if (!cursor) return;

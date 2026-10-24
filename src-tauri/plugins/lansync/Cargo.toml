@@ -1,0 +1,15 @@
+[package]
+name = "tauri-plugin-lansync"
+version = "0.1.0"
+description = "Wi-Fi sync transport: finds LumaRead on the local network and carries already-encrypted messages"
+edition = "2021"
+links = "tauri-plugin-lansync"
+publish = false
+
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

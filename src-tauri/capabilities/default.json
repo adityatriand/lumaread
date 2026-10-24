@@ -11,6 +11,8 @@
     "dialog:allow-save",
     "fs:allow-write-text-file",
     "fs:allow-write-file",
-    "quoteshare:default"
+    "quoteshare:default",
+    "readaloud:default",
+    "lansync:default"
   ]
 }

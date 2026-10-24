@@ -1,0 +1,14 @@
+[package]
+name = "tauri-plugin-readaloud"
+version = "0.1.0"
+description = "Offline read-aloud through Android's TextToSpeech (the Android WebView has no speechSynthesis)"
+edition = "2021"
+links = "tauri-plugin-readaloud"
+publish = false
+
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

@@ -1,17 +1,30 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { saveSession, type Session } from "../../lib/db";
 import { dayKey } from "./stats";
 
 const IDLE_MS = 2 * 60_000; // no input for this long = not reading (book left open)
-const TICK_MS = 5_000;
+const TICK_MS = 1_000; // the reader's on-screen timer reads it every second
+const MAX_GAP_MS = 10_000; // longest stretch one tick may credit
 const SAVE_MS = 30_000;
 const MIN_SESSION_MS = 10_000; // opening a book by mistake isn't a session
 
+// reading = time counts; idle = auto-paused (window hidden or no input for 2 minutes); paused = the reader paused it
+export type SessionState = "reading" | "idle" | "paused";
+
+export interface ReadingSession {
+  location: (key: string, percent: number) => void;
+  snapshot: () => { id: string; activeMs: number; state: SessionState };
+  setPaused: (paused: boolean) => void;
+  touch: () => void; // activity without input, e.g. listening to read-aloud
+}
+
 // Records one reading session per opened book; call location() on every page turn
-export function useReadingSession(docId: string) {
+export function useReadingSession(docId: string): ReadingSession {
   const session = useRef<Session>(null);
   const seen = useRef(new Set<string>());
   const lastActive = useRef(0);
+  const paused = useRef(false);
+  const active = () => !paused.current && document.visibilityState === "visible" && Date.now() - lastActive.current < IDLE_MS;
 
   useEffect(() => {
     const start = Date.now();
@@ -24,9 +37,9 @@ export function useReadingSession(docId: string) {
     const tick = () => {
       const now = Date.now();
       const s = session.current!;
-      if (document.visibilityState === "visible" && now - lastActive.current < IDLE_MS) {
+      if (active()) {
         // Capped so a suspended laptop or throttled timer can't credit the gap
-        s.activeMs += Math.min(now - lastTick, TICK_MS * 2);
+        s.activeMs += Math.min(now - lastTick, MAX_GAP_MS);
         s.endedAt = now;
       }
       lastTick = now;
@@ -61,16 +74,32 @@ export function useReadingSession(docId: string) {
     };
   }, [docId]);
 
-  return {
-    // Page turns are activity too (EPUB input happens inside the book iframe, out of reach of window listeners)
-    location(key: string, percent: number) {
-      const s = session.current;
-      if (!s) return;
-      lastActive.current = Date.now();
-      if (s.startPercent < 0) s.startPercent = percent;
-      s.endPercent = percent;
-      seen.current.add(key);
-      s.pages = seen.current.size;
-    },
-  };
+  return useMemo(
+    () => ({
+      // Page turns are activity too (EPUB input happens inside the book iframe, out of reach of window listeners)
+      location(key: string, percent: number) {
+        const s = session.current;
+        if (!s) return;
+        lastActive.current = Date.now();
+        if (s.startPercent < 0) s.startPercent = percent;
+        s.endPercent = percent;
+        seen.current.add(key);
+        s.pages = seen.current.size;
+      },
+      snapshot() {
+        const s = session.current;
+        const state: SessionState = paused.current ? "paused" : active() ? "reading" : "idle";
+        return { id: s?.id ?? "", activeMs: s?.activeMs ?? 0, state };
+      },
+      touch() {
+        lastActive.current = Date.now();
+      },
+      setPaused(p: boolean) {
+        paused.current = p;
+        // Resuming counts as activity, so the clock restarts at once instead of waiting for the next input
+        if (!p) lastActive.current = Date.now();
+      },
+    }),
+    [],
+  );
 }

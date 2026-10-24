@@ -34,7 +34,8 @@ test("reading time, pages and streak are tracked and shown per book and overall"
   // Three minutes of active reading: a page turn, then regular input
   for (let i = 0; i < 6; i++) {
     if (i === 2) await page.getByRole("button", { name: "Next page" }).click();
-    await page.locator(".pdf-container").click({ position: { x: 5, y: 5 } });
+    // Mid-page: the reader's (hidden) header floats over the top edge
+    await page.locator(".pdf-container").click();
     await page.clock.runFor(30_000);
   }
   // Leaving the book for 5 minutes without input must not count
@@ -72,6 +73,15 @@ test("reading time, pages and streak are tracked and shown per book and overall"
   const dialog = page.getByRole("dialog", { name: "Share achievement" });
   const size = () => dialog.locator("img").evaluate((img: HTMLImageElement) => img.decode().then(() => [img.naturalWidth, img.naturalHeight], () => null));
   await expect.poll(size).toEqual([1080, 1920]);
+  // The story card's chart comes as bars or a line; square cards have no chart, so no choice
+  await expect(dialog.getByRole("radio", { name: "Bar" })).toHaveAttribute("aria-checked", "true");
+  await dialog.getByRole("radio", { name: "Line" }).click();
+  await expect(dialog.getByRole("radio", { name: "Line" })).toHaveAttribute("aria-checked", "true");
+  await expect.poll(size).toEqual([1080, 1920]);
+  await dialog.getByRole("radio", { name: "Square" }).click();
+  await expect(dialog.getByRole("radiogroup", { name: "Chart" })).toHaveCount(0);
+  await expect.poll(size).toEqual([1080, 1080]);
+  await dialog.getByRole("radio", { name: "Story 9:16" }).click();
   await dialog.getByRole("button", { name: "Save image" }).click();
   await expect.poll(async () => (await invokedCalls(page)).find((c) => c.cmd === "plugin:dialog|save")?.args).toMatchObject({ options: { defaultPath: "lumaread-achievement-story.png" } });
 });

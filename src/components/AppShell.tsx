@@ -1,8 +1,8 @@
-import { ChartColumn, Ellipsis, Highlighter, House, LibraryBig, NotebookPen, Search, Settings } from "lucide-react";
+import { ArrowLeftRight, Bookmark, ChartColumn, Ellipsis, Highlighter, House, LibraryBig, NotebookPen, Search, Settings } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Logo } from "./Logo";
 
-export type View = "home" | "library" | "notebook" | "notes" | "stats" | "search" | "settings";
+export type View = "home" | "library" | "notebook" | "notes" | "bookmarks" | "stats" | "sync" | "search" | "settings";
 
 type NavItem = { view: View; label: string; Icon: typeof House };
 
@@ -11,12 +11,14 @@ const SIDEBAR: NavItem[] = [
   { view: "library", label: "Library", Icon: LibraryBig },
   { view: "notebook", label: "Highlights", Icon: Highlighter },
   { view: "notes", label: "Notes", Icon: NotebookPen },
+  { view: "bookmarks", label: "Bookmarks", Icon: Bookmark },
   { view: "stats", label: "Stats", Icon: ChartColumn },
+  { view: "sync", label: "Sync", Icon: ArrowLeftRight },
   { view: "settings", label: "Settings", Icon: Settings },
 ];
 // Phones get four tabs; the rest live under More
 const TABS = SIDEBAR.slice(0, 3);
-const MORE: NavItem[] = [SIDEBAR[3], SIDEBAR[4], { view: "search", label: "Search", Icon: Search }, SIDEBAR[5]];
+const MORE: NavItem[] = [...SIDEBAR.slice(3, -1), { view: "search", label: "Search", Icon: Search }, SIDEBAR.at(-1)!];
 
 interface Props { view: View; query: string; onNavigate: (v: View) => void; onSearch: (query: string) => void; children: ReactNode }
 

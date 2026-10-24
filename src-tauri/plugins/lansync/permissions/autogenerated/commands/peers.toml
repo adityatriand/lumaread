@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-peers"
+description = "Enables the peers command without any pre-configured scope."
+commands.allow = ["peers"]
+
+[[permission]]
+identifier = "deny-peers"
+description = "Denies the peers command without any pre-configured scope."
+commands.deny = ["peers"]
