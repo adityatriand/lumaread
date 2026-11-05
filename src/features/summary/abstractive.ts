@@ -1,15 +1,19 @@
+import type { DocText } from "../../lib/db";
 import type { ExtractedSummary } from "./summarize";
+import { chunkBookForSummary, cleanSummaryText } from "./summarize";
 import { detectLang, translate } from "../lookup/translate";
 
 const MODEL = "Xenova/distilbart-cnn-6-6";
 const ORT_STEM = "ort-wasm-simd-threaded.asyncify";
+const MAX_NEW = 160;
+const MAP_NEW = 96;
 const vendor = (p: string) => new URL(`/vendor/${p}`, location.href).href;
 
 export type Progress = (done: number, total: number) => void;
 export type LoadProgress = (message: string) => void;
 
 let packOk: Promise<boolean> | undefined;
-let pipePromise: Promise<(text: string) => Promise<string>> | undefined;
+let pipePromise: Promise<(text: string, opts?: { max_new_tokens?: number; min_new_tokens?: number }) => Promise<string>> | undefined;
 
 /** True when DistilBART is shipped under /vendor/summarization. */
 export function summarizationPackAvailable() {
@@ -22,11 +26,6 @@ export function summarizationPackAvailable() {
     .catch(() => false));
 }
 
-/**
- * Preload ORT for Tauri/WebView:
- * blob: .mjs (correct MIME) + wasmBinary (blob has no relative .wasm path) + single thread.
- * Mutate wasm config in place — replacing the object makes ORT fall back to jsDelivr.
- */
 async function configureOrt(env: {
   useWasmCache: boolean;
   backends: { onnx: { wasm?: Record<string, unknown> } };
@@ -51,11 +50,6 @@ async function configureOrt(env: {
   wasm.proxy = false;
 }
 
-/**
- * transformers.js only probes local *filesystem* paths for tokenizer existence.
- * Browser/Tauri serve the pack over http(s), so that probe is skipped and the
- * tokenizer is dropped unless "remote" points at our own /vendor/summarization.
- */
 function configureModelHost(env: {
   allowRemoteModels: boolean;
   allowLocalModels: boolean;
@@ -96,10 +90,14 @@ async function loadPipe(onLoad?: LoadProgress) {
           }
         },
       });
-      return async (text: string) => {
-        const out = await summarizer(text, { max_new_tokens: 96, truncation: true });
+      return async (text: string, opts?: { max_new_tokens?: number; min_new_tokens?: number }) => {
+        const out = await summarizer(text, {
+          max_new_tokens: opts?.max_new_tokens ?? MAX_NEW,
+          min_new_tokens: opts?.min_new_tokens ?? 40,
+          truncation: true,
+        });
         const row = Array.isArray(out) ? out[0] : out;
-        return String((row as { summary_text?: string }).summary_text ?? "").trim();
+        return finishSentence(String((row as { summary_text?: string }).summary_text ?? "").trim());
       };
     })().catch((err) => {
       pipePromise = undefined;
@@ -109,36 +107,77 @@ async function loadPipe(onLoad?: LoadProgress) {
   return pipePromise;
 }
 
-async function rewriteOne(text: string, summarize: (t: string) => Promise<string>): Promise<string> {
-  const trimmed = text.replace(/\s+/g, " ").trim();
-  if (trimmed.length < 80) return trimmed;
-  const lang = detectLang(trimmed);
-  const english = lang === "id" ? await translate(trimmed, "id", "en") : trimmed;
-  const rewritten = await summarize(english);
-  if (!rewritten) return trimmed;
-  return lang === "id" ? await translate(rewritten, "en", "id") : rewritten;
+function finishSentence(s: string): string {
+  const t = cleanSummaryText(s);
+  if (!t) return t;
+  if (/[.!?…]"?$/.test(t)) return t;
+  const cut = Math.max(t.lastIndexOf(". "), t.lastIndexOf("! "), t.lastIndexOf("? "));
+  return cut > 48 ? t.slice(0, cut + 1) : t;
 }
 
-/** One fluent rewrite of the overview (plus chapter wraps when present). */
+async function translatePass(text: string, from: "id" | "en", to: "id" | "en"): Promise<string> {
+  const parts = text.split(/(?<=[.!?…])\s+/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return cleanSummaryText(await translate(text, from, to));
+  const out: string[] = [];
+  for (const part of parts) out.push(await translate(part, from, to));
+  return finishSentence(out.join(" "));
+}
+
+type SummarizeFn = (text: string, opts?: { max_new_tokens?: number; min_new_tokens?: number }) => Promise<string>;
+
+async function summarizeInLang(text: string, summarize: SummarizeFn, opts?: { max_new_tokens?: number; min_new_tokens?: number }): Promise<string> {
+  const trimmed = cleanSummaryText(text);
+  if (trimmed.length < 80) return trimmed;
+  const lang = detectLang(trimmed);
+  const english = lang === "id" ? await translatePass(trimmed, "id", "en") : trimmed;
+  const rewritten = await summarize(english, opts);
+  if (!rewritten) return trimmed;
+  return lang === "id" ? await translatePass(rewritten, "en", "id") : rewritten;
+}
+
+/**
+ * Whole book → one wrap: DistilBART over every body chunk, then one reduce pass.
+ * chapters always empty — UI shows a single summary.
+ */
 export async function rewriteSummary(
-  extracted: ExtractedSummary,
+  _extracted: ExtractedSummary,
   onProgress?: Progress,
   onLoad?: LoadProgress,
+  texts?: DocText[],
 ): Promise<ExtractedSummary> {
   const summarize = await loadPipe(onLoad);
-  const chapters = extracted.chapters.slice(0, 12);
-  const total = Math.max(1, (extracted.overview ? 1 : 0) + chapters.length);
+  const chunks = texts?.length ? chunkBookForSummary(texts) : [];
+  // Fallback: rewrite the extractive overview only if we have no page text
+  if (!chunks.length) {
+    const overview = _extracted.overview
+      ? await summarizeInLang(_extracted.overview, summarize, { max_new_tokens: MAX_NEW, min_new_tokens: 48 })
+      : "";
+    onProgress?.(1, 1);
+    return { overview, chapters: [] };
+  }
+
+  const total = chunks.length + 1;
   let done = 0;
-  const tick = () => onProgress?.(++done, total);
+  const tick = (msg?: string) => {
+    done += 1;
+    onProgress?.(done, total);
+    if (msg) onLoad?.(msg);
+  };
 
-  const overview = extracted.overview ? await rewriteOne(extracted.overview, summarize) : "";
-  if (extracted.overview) tick();
-
-  const outChapters = [];
-  for (const c of chapters) {
-    outChapters.push({ ...c, text: await rewriteOne(c.text, summarize) });
+  const partials: string[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    onLoad?.(`Summarising book… ${i + 1}/${chunks.length}`);
+    const part = await summarizeInLang(chunks[i], summarize, { max_new_tokens: MAP_NEW, min_new_tokens: 32 });
+    if (part) partials.push(part);
     tick();
   }
 
-  return { overview, chapters: outChapters };
+  onLoad?.("Writing final summary…");
+  const merged = partials.join(" ");
+  const overview = merged.length >= 80
+    ? await summarizeInLang(merged, summarize, { max_new_tokens: MAX_NEW, min_new_tokens: 64 })
+    : merged;
+  tick();
+
+  return { overview, chapters: [] };
 }

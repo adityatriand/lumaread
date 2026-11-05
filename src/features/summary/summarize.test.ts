@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DocText } from "../../lib/db";
-import { summarizeBook } from "./summarize";
+import { chunkBookForSummary, summarizeBook } from "./summarize";
 
 const unit = (n: number, text: string, label = `Chapter ${n}`): DocText => ({
   docId: "b",
@@ -91,5 +91,48 @@ describe("summarizeBook", () => {
     expect(result.chapters).toEqual([]);
     expect(result.overview.toLowerCase()).not.toMatch(/hak cipta|isbn|gramedia|edogawa|naoki/);
     expect(result.overview.toLowerCase()).toMatch(/ayane|pansies|investigators|patchwork/);
+  });
+
+  it("chunks the whole PDF body so every page is covered", () => {
+    const story = long(
+      "Ayane quietly waters the pansies while the investigators wait downstairs",
+      "The dry pot and patchwork fabric keep coming up whenever colleagues recount that evening.",
+    );
+    const pages = Array.from({ length: 12 }, (_, i) => unit(i + 1, story, `Page ${i + 1}`));
+    const chunks = chunkBookForSummary(pages, 6, 400);
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.length).toBeLessThanOrEqual(6);
+    const joined = chunks.join(" ").toLowerCase();
+    expect(joined).toMatch(/ayane|pansies|investigators/);
+  });
+
+  it("strips OCR digit noise and drops yen price asides", async () => {
+    const { cleanSummaryText } = await import("./summarize");
+    expect(cleanSummaryText("Seniman tidak begitu bodoh untuk melakukan tindakan impulsif yang dapat 20 menghancurkan hidupnya.")).toBe(
+      "Seniman tidak begitu bodoh untuk melakukan tindakan impulsif yang dapat menghancurkan hidupnya.",
+    );
+    const priced = long(
+      "A single bed cover can cost one million yen at the specialty shop downtown",
+      "Shopkeepers insist the fabric is imported and the stitching takes weeks of careful work by hand.",
+    );
+    const plot = long(
+      "Ayane quietly waters the pansies while the investigators wait downstairs",
+      "The dry pot and patchwork fabric keep coming up whenever colleagues recount that evening.",
+    );
+    // Price aside sits in the body (pages 3–8), not the skipped margins
+    const result = summarizeBook([
+      unit(1, plot, "Page 1"),
+      unit(2, plot, "Page 2"),
+      unit(3, priced, "Page 3"),
+      unit(4, plot, "Page 4"),
+      unit(5, plot, "Page 5"),
+      unit(6, plot, "Page 6"),
+      unit(7, plot, "Page 7"),
+      unit(8, priced, "Page 8"),
+      unit(9, plot, "Page 9"),
+      unit(10, plot, "Page 10"),
+    ]);
+    expect(result.overview.toLowerCase()).not.toMatch(/yen|million/);
+    expect(result.overview.toLowerCase()).toMatch(/ayane|pansies|investigators/);
   });
 });

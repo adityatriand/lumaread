@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { ExtractedSummary } from "./summarize";
 
-// Pack/model loading needs /vendor assets; unit-test only the pure shape contract via summarize + types
+// Pack/model loading needs /vendor assets; unit-test the contract that AI returns one wrap
 describe("abstractive contract", () => {
-  it("ExtractedSummary is what rewriteSummary consumes", () => {
+  it("AI rewrite result is one overview with empty chapters", () => {
     const sample: ExtractedSummary = {
-      overview: "Mindfulness helps attention during long reading sessions.",
-      chapters: [{ unit: 1, label: "One", text: "Daily habits beat cramming for comprehension." }],
+      overview: "The investigators keep returning to the pansies and the dry pot.",
+      chapters: [],
     };
-    expect(sample.chapters[0].unit).toBe(1);
+    expect(sample.chapters).toEqual([]);
+    expect(sample.overview.length).toBeGreaterThan(20);
   });
 });

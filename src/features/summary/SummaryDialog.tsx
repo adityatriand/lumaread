@@ -64,8 +64,9 @@ export function SummaryDialog({ doc, onClose }: Props) {
       }
       const rewritten = await rewriteSummary(
         extracted,
-        (done, total) => setProgress(`Rewriting… ${done}/${total}`),
+        (done, total) => setProgress(`Summarising book… ${done}/${total}`),
         setProgress,
+        texts,
       );
       const next: DocSummary = { docId: doc.id, ...rewritten, createdAt: Date.now(), method: "abstractive" };
       await saveSummary(next);
@@ -94,8 +95,8 @@ export function SummaryDialog({ doc, onClose }: Props) {
 
   const methodNote =
     summary?.method === "abstractive"
-      ? "Rewritten on this device with DistilBART. Indonesian text goes through Bergamot first."
-      : "Key sentences picked on this device — not an AI rewrite.";
+      ? "One summary of the whole book (every body page), rewritten on-device with DistilBART."
+      : "Key sentences from every body page, joined into one wrap — not an AI rewrite.";
 
   return (
     <div className="backdrop" onClick={onClose}>
@@ -106,7 +107,7 @@ export function SummaryDialog({ doc, onClose }: Props) {
             <p className="muted small" style={{ margin: "4px 0 0" }}>{doc.title}{doc.author ? ` · ${doc.author}` : ""}</p>
           </div>
           <button className="icon-button" disabled={busy} onClick={buildExtractive} aria-label="Regenerate extractive summary" title="Regenerate">
-            <RefreshCw size={18} className={busy && !progress?.startsWith("Rewriting") ? "spin" : undefined} />
+            <RefreshCw size={18} className={busy && !progress?.startsWith("Summarising") && !progress?.startsWith("Writing") && !progress?.startsWith("Loading") && !progress?.startsWith("Downloading") ? "spin" : undefined} />
           </button>
         </header>
 
@@ -141,7 +142,7 @@ export function SummaryDialog({ doc, onClose }: Props) {
         <div className="dialog-actions summary-actions">
           <button type="button" className="button" disabled={busy || !summary} onClick={buildAbstractive}>
             <Sparkles size={16} aria-hidden="true" />
-            {aiPack ? "Rewrite with on-device AI" : "Download AI model & rewrite"}
+            {aiPack ? "AI: whole book → 1 summary" : "Download AI model & summarise book"}
           </button>
           <button type="button" className="button" onClick={onClose}>Close</button>
         </div>
