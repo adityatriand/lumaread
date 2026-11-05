@@ -55,7 +55,7 @@ Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and 
 | | |
 | :-- | :-- |
 | 🖍️ **Highlights & notes** | 4 colours, notes on highlights or whole documents, copy a quote with its source |
-| 🧾 **Summary** | On-device extractive overview + per-chapter key sentences (library ⋮ → Summary). Optional DistilBART rewrite via `pnpm setup:summarize` (~284 MB) — still fully offline, never uploaded |
+| 🧾 **Summary** | On-device extractive overview (library ⋮ → Summary). **Rewrite with AI** downloads DistilBART once (~284 MB) into the device cache, or uses `pnpm setup:summarize` / `LUMAREAD_EMBED_SUMMARIZE=1` if you embed it — never uploaded |
 | 📤 **Export** | Markdown or CSV through the system save dialog. CSV is formula-safe with a UTF-8 BOM |
 | 🔎 **Search** | Titles, book text, highlights and notes, ignoring case and accents. Results open the right page or chapter (⌘K / Ctrl+K) |
 | 🔤 **OCR** | tesseract.js (Indonesian + English) for scanned PDFs. The page being read is recognised automatically; recognised words are selectable, highlightable and searchable |
@@ -96,7 +96,7 @@ pnpm tauri dev         # desktop dev window
 ```
 
 > [!NOTE]
-> `data/` is generated, not committed (attribution files stay tracked). If dictionaries/translation are missing, the build stops and tells you to run `pnpm setup:data`. The summarization pack is optional — without it, Summary stays extractive.
+> `data/` is generated, not committed (attribution files stay tracked). If dictionaries/translation are missing, the build stops and tells you to run `pnpm setup:data`. The summarization pack is optional to embed; the app can also download it on first AI rewrite.
 
 ## Development
 

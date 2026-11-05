@@ -53,7 +53,11 @@ const VENDOR_FILES: Record<string, string> = {
       path.join(pkgDir("@browsermt/bergamot-translator"), "worker", f),
     ]),
   ),
-  // ONNX Runtime for optional DistilBART (transformers.js); always small enough to ship
+  // ONNX Runtime for DistilBART — transformers.js defaults to asyncify; plain for older Safari
+  "ort/ort-wasm-simd-threaded.asyncify.mjs": path.join(ortDist, "ort-wasm-simd-threaded.asyncify.mjs"),
+  "ort/ort-wasm-simd-threaded.asyncify.wasm": path.join(ortDist, "ort-wasm-simd-threaded.asyncify.wasm"),
+  "ort/ort-wasm-simd-threaded.mjs": path.join(ortDist, "ort-wasm-simd-threaded.mjs"),
+  "ort/ort-wasm-simd-threaded.wasm": path.join(ortDist, "ort-wasm-simd-threaded.wasm"),
   "ort/ort-wasm-simd-threaded.jsep.mjs": path.join(ortDist, "ort-wasm-simd-threaded.jsep.mjs"),
   "ort/ort-wasm-simd-threaded.jsep.wasm": path.join(ortDist, "ort-wasm-simd-threaded.jsep.wasm"),
   // Downloaded by scripts/fetch-translation-models.mjs
@@ -79,6 +83,7 @@ function vendorAssets(): Plugin {
         const file = VENDOR_FILES[url] ?? summarizeFile(url);
         if (!file) return next();
         if (file.endsWith(".wasm")) res.setHeader("Content-Type", "application/wasm");
+        else if (file.endsWith(".mjs") || file.endsWith(".js")) res.setHeader("Content-Type", "text/javascript");
         else if (file.endsWith(".onnx")) res.setHeader("Content-Type", "application/octet-stream");
         fs.createReadStream(file).pipe(res);
       });

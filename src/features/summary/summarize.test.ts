@@ -64,4 +64,32 @@ describe("summarizeBook", () => {
     expect(result.overview.length).toBeGreaterThan(40);
     expect(result.overview.toLowerCase()).toMatch(/arsenic|yoshitaka|ayane|kusanagi|marriage|coffee/);
   });
+
+  it("drops copyright / ISBN boilerplate and skips PDF front-back margins", () => {
+    const legal =
+      "Undang-Undang Nomor 28 Tahun 2014 tentang Hak Cipta. Sanksi pidana penjara paling lama sepuluh tahun dan denda empat miliar rupiah. ISBN 978-602-06-5037-1 dicetak oleh PT Gramedia Jakarta untuk penerbit.";
+    const story = long(
+      "Ayane quietly waters the pansies while the investigators wait downstairs",
+      "The dry pot and patchwork fabric keep coming up whenever colleagues recount that evening.",
+    );
+    const bio =
+      "Keigo Higashino menerima Edogawa Rampo Prize untuk Hokago dan Naoki Prize untuk Yogisha X no Kenshin sebagai penghargaan sastra penting dalam kariernya.";
+    // 10 page units so 4% margins skip first/last two
+    const pages = [
+      unit(1, legal, "Page 1"),
+      unit(2, legal, "Page 2"),
+      unit(3, story, "Page 3"),
+      unit(4, story, "Page 4"),
+      unit(5, story, "Page 5"),
+      unit(6, story, "Page 6"),
+      unit(7, story, "Page 7"),
+      unit(8, story, "Page 8"),
+      unit(9, bio, "Page 9"),
+      unit(10, bio, "Page 10"),
+    ];
+    const result = summarizeBook(pages);
+    expect(result.chapters).toEqual([]);
+    expect(result.overview.toLowerCase()).not.toMatch(/hak cipta|isbn|gramedia|edogawa|naoki/);
+    expect(result.overview.toLowerCase()).toMatch(/ayane|pansies|investigators|patchwork/);
+  });
 });

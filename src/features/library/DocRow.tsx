@@ -46,13 +46,22 @@ export function DocRow({ item, onOpen, onRemove, onStats, onSummary, onEdit, onR
           )}
         </span>
       </button>
-      <details className="menu">
+      <details
+        className="menu"
+        onToggle={(e) => {
+          const el = e.currentTarget;
+          if (!el.open) return;
+          document.querySelectorAll<HTMLDetailsElement>("details.menu[open]").forEach((d) => {
+            if (d !== el) d.removeAttribute("open");
+          });
+        }}
+      >
         <summary aria-label={`More actions for ${doc.title}`}><MoreHorizontal size={18} /></summary>
         <div className="menu-items">
           {onEdit && <button className="menu-neutral" onClick={(e) => (e.currentTarget.closest("details")?.removeAttribute("open"), onEdit())}>Edit details</button>}
           {onShelves && <button className="menu-neutral" onClick={(e) => (e.currentTarget.closest("details")?.removeAttribute("open"), onShelves())}>Shelves…</button>}
           {onSummary && <button className="menu-neutral" onClick={(e) => (e.currentTarget.closest("details")?.removeAttribute("open"), onSummary())}>Summary</button>}
-          {onStats && <button className="menu-neutral" onClick={onStats}>Reading stats</button>}
+          {onStats && <button className="menu-neutral" onClick={(e) => (e.currentTarget.closest("details")?.removeAttribute("open"), onStats())}>Reading stats</button>}
           {onReset && (progress || doc.openedAt) && (
             <button className="menu-neutral" onClick={(e) => (e.currentTarget.closest("details")?.removeAttribute("open"), onReset())}>Reset progress</button>
           )}

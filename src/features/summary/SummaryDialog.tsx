@@ -62,13 +62,18 @@ export function SummaryDialog({ doc, onClose }: Props) {
         setError("Not enough text in this book to summarise.");
         return;
       }
-      setProgress("Loading on-device model…");
-      const rewritten = await rewriteSummary(extracted, (done, total) => setProgress(`Rewriting… ${done}/${total}`));
+      const rewritten = await rewriteSummary(
+        extracted,
+        (done, total) => setProgress(`Rewriting… ${done}/${total}`),
+        setProgress,
+      );
       const next: DocSummary = { docId: doc.id, ...rewritten, createdAt: Date.now(), method: "abstractive" };
       await saveSummary(next);
       setSummary(next);
-    } catch {
-      setError("On-device AI rewrite failed. Extractive summary is unchanged — try again, or run pnpm setup:summarize.");
+      setAiPack(true);
+    } catch (e) {
+      const detail = e instanceof Error && e.message ? e.message : "unknown error";
+      setError(`AI rewrite failed (${detail}). Check the network on first download, then try again.`);
     } finally {
       setBusy(false);
       setProgress(undefined);
@@ -89,7 +94,7 @@ export function SummaryDialog({ doc, onClose }: Props) {
 
   const methodNote =
     summary?.method === "abstractive"
-      ? "Rewritten on this device with DistilBART (optional pack). Indonesian text goes through Bergamot first."
+      ? "Rewritten on this device with DistilBART. Indonesian text goes through Bergamot first."
       : "Key sentences picked on this device — not an AI rewrite.";
 
   return (
@@ -134,15 +139,10 @@ export function SummaryDialog({ doc, onClose }: Props) {
         )}
 
         <div className="dialog-actions summary-actions">
-          {aiPack ? (
-            <button type="button" className="button" disabled={busy || !summary} onClick={buildAbstractive}>
-              <Sparkles size={16} aria-hidden="true" /> Rewrite with on-device AI
-            </button>
-          ) : (
-            <p className="muted small" style={{ margin: 0, maxWidth: "60%" }}>
-              Optional AI pack not installed (`pnpm setup:summarize`, ~284 MB).
-            </p>
-          )}
+          <button type="button" className="button" disabled={busy || !summary} onClick={buildAbstractive}>
+            <Sparkles size={16} aria-hidden="true" />
+            {aiPack ? "Rewrite with on-device AI" : "Download AI model & rewrite"}
+          </button>
           <button type="button" className="button" onClick={onClose}>Close</button>
         </div>
       </div>

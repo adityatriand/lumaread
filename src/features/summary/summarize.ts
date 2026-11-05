@@ -20,6 +20,10 @@ const PAGE_OVERVIEW = 12;
 
 const isPageLabel = (label: string) => /^page\s+\d+/i.test(label.trim());
 
+// Copyright pages, ISBN blocks, award bios — dense rare words that TF–IDF loves
+const BOILERPLATE =
+  /hak\s*cipta|undang[-\s]?undang|copyright|all\s+rights\s+reserved|isbn|dilarang\s+mengutip|sanksi\s+pidana|pidana\s+penjara|penerbit|gramedia|percetakan|katalog\s+dalam\s+terbitan|\bkdt\b|edogawa|naoki\s+prize|penghargaan\s+sastra|printed\s+in|undang\s+no\.?\s*\d+/i;
+
 // Small EN + ID set so frequency scoring ignores glue words
 const STOP = new Set(
   fold(
@@ -30,13 +34,24 @@ const STOP = new Set(
   ).split(/\s+/),
 );
 
+function clean(text: string): string {
+  return text.replace(/[|°~•]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function isBoilerplate(s: string): boolean {
+  if (BOILERPLATE.test(s)) return true;
+  // ISBN-ish digit runs with publishing noise
+  if (/\b97[89][\d-]{10,}\b/.test(s)) return true;
+  // OCR garbage lines
+  if ((s.match(/[|/]/g) ?? []).length >= 3) return true;
+  return false;
+}
+
 function sentences(text: string): string[] {
-  return text
-    .replace(/\s+/g, " ")
-    .trim()
+  return clean(text)
     .split(/(?<=[.!?…])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length >= 40 && /[\p{L}]/u.test(s));
+    .filter((s) => s.length >= 40 && /[\p{L}]/u.test(s) && !isBoilerplate(s));
 }
 
 function tokens(s: string): string[] {
@@ -71,6 +86,13 @@ function pickSentences(pool: string[], n: number): string[] {
   return pool.filter((_, i) => chosen.has(i));
 }
 
+/** Skip title/copyright front and award/bio back matter on long PDFs. */
+function inBody(index: number, total: number): boolean {
+  if (total <= 8) return true;
+  const margin = Math.max(2, Math.floor(total * 0.04));
+  return index >= margin && index < total - margin;
+}
+
 /** Extractive overview (+ chapter picks for real chapters). PDFs stay one wrap — no per-page list. */
 export function summarizeBook(texts: DocText[]): ExtractedSummary {
   const units = [...texts]
@@ -83,14 +105,15 @@ export function summarizeBook(texts: DocText[]): ExtractedSummary {
   const chapters: ChapterSummary[] = [];
   const overviewPool: string[] = [];
 
-  for (const unit of units) {
+  units.forEach((unit, index) => {
+    if (pageMode && !inBody(index, units.length)) return;
     const picked = pickSentences(sentences(unit.text), PER_CHAPTER);
-    if (!picked.length) continue;
+    if (!picked.length) return;
     if (!pageMode) {
       chapters.push({ unit: unit.unit, label: unit.label, href: unit.href, text: picked.join(" ") });
     }
     overviewPool.push(...picked);
-  }
+  });
 
   const n = pageMode ? PAGE_OVERVIEW : OVERVIEW;
   const overview = pickSentences(overviewPool, n).join(" ");
