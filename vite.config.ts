@@ -15,8 +15,10 @@ const pkgDir = (name: string, from?: string) =>
   path.dirname(createRequire(from ?? import.meta.url).resolve(`${name}/package.json`));
 const pdfjs = pkgDir("pdfjs-dist");
 const tesseract = pkgDir("tesseract.js");
-// Package exports hide subpaths; resolve("onnxruntime-web") lands in dist/
-const ortDist = path.dirname(require.resolve("onnxruntime-web"));
+// Use the same onnxruntime-web build transformers.js depends on (not a sibling version)
+const ortDist = path.dirname(
+  createRequire(require.resolve("@huggingface/transformers")).resolve("onnxruntime-web"),
+);
 const SUMMARIZE_ROOT = path.resolve("data/summarization");
 
 // Generated data isn't committed; fail with the fix instead of shipping an app without it

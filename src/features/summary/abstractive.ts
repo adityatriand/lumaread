@@ -2,6 +2,7 @@ import type { ExtractedSummary } from "./summarize";
 import { detectLang, translate } from "../lookup/translate";
 
 const MODEL = "Xenova/distilbart-cnn-6-6";
+const ORT_STEM = "ort-wasm-simd-threaded.asyncify";
 const vendor = (p: string) => new URL(`/vendor/${p}`, location.href).href;
 
 export type Progress = (done: number, total: number) => void;
@@ -21,20 +22,58 @@ export function summarizationPackAvailable() {
     .catch(() => false));
 }
 
-/** Fetch ORT files and expose as blob: URLs (Tauri MIME + CSP need blob: in script-src). */
-async function ortWasmPaths(stem: string): Promise<{ mjs: string; wasm: string }> {
+/**
+ * Preload ORT for Tauri/WebView:
+ * blob: .mjs (correct MIME) + wasmBinary (blob has no relative .wasm path) + single thread.
+ * Mutate wasm config in place — replacing the object makes ORT fall back to jsDelivr.
+ */
+async function configureOrt(env: {
+  useWasmCache: boolean;
+  backends: { onnx: { wasm?: Record<string, unknown> } };
+}) {
   const [mjsRes, wasmRes] = await Promise.all([
-    fetch(vendor(`ort/${stem}.mjs`)),
-    fetch(vendor(`ort/${stem}.wasm`)),
+    fetch(vendor(`ort/${ORT_STEM}.mjs`)),
+    fetch(vendor(`ort/${ORT_STEM}.wasm`)),
   ]);
   if (!mjsRes.ok || !wasmRes.ok) {
-    throw new Error(`ORT wasm missing (${stem}, ${mjsRes.status}/${wasmRes.status})`);
+    throw new Error(`ORT assets missing (${ORT_STEM}: ${mjsRes.status}/${wasmRes.status})`);
   }
-  const [mjsBuf, wasmBuf] = await Promise.all([mjsRes.arrayBuffer(), wasmRes.arrayBuffer()]);
-  return {
-    mjs: URL.createObjectURL(new Blob([new Uint8Array(mjsBuf)], { type: "text/javascript" })),
-    wasm: URL.createObjectURL(new Blob([new Uint8Array(wasmBuf)], { type: "application/wasm" })),
-  };
+  let code = await mjsRes.text();
+  code = code.replaceAll("globalThis.process?.versions?.node", "false");
+  const mjs = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+  const wasmBinary = await wasmRes.arrayBuffer();
+
+  env.useWasmCache = false;
+  const wasm = env.backends.onnx.wasm ?? (env.backends.onnx.wasm = {});
+  wasm.wasmPaths = { mjs };
+  wasm.wasmBinary = wasmBinary;
+  wasm.numThreads = 1;
+  wasm.proxy = false;
+}
+
+/**
+ * transformers.js only probes local *filesystem* paths for tokenizer existence.
+ * Browser/Tauri serve the pack over http(s), so that probe is skipped and the
+ * tokenizer is dropped unless "remote" points at our own /vendor/summarization.
+ */
+function configureModelHost(env: {
+  allowRemoteModels: boolean;
+  allowLocalModels: boolean;
+  remoteHost: string;
+  remotePathTemplate: string;
+  localModelPath: string;
+}, local: boolean) {
+  if (local) {
+    const base = vendor("summarization/");
+    env.allowRemoteModels = true;
+    env.allowLocalModels = true;
+    env.remoteHost = base;
+    env.remotePathTemplate = "{model}/";
+    env.localModelPath = base;
+  } else {
+    env.allowRemoteModels = true;
+    env.allowLocalModels = false;
+  }
 }
 
 async function loadPipe(onLoad?: LoadProgress) {
@@ -42,42 +81,21 @@ async function loadPipe(onLoad?: LoadProgress) {
     pipePromise = (async () => {
       const local = await summarizationPackAvailable();
       const { env, pipeline } = await import("@huggingface/transformers");
-      // Prefer embedded pack; otherwise first run downloads ~284 MB into the WebView cache
-      env.allowRemoteModels = !local;
-      env.allowLocalModels = local;
-      if (local) env.localModelPath = vendor("summarization/");
-      env.useWasmCache = true;
-      // asyncify is transformers' default; plain is a fallback if asyncify fails to init
-      let wasmPaths = await ortWasmPaths("ort-wasm-simd-threaded.asyncify");
-      env.backends.onnx = {
-        ...env.backends.onnx,
-        wasm: { ...env.backends.onnx?.wasm, wasmPaths, proxy: false },
-      };
+      configureModelHost(env as Parameters<typeof configureModelHost>[0], local);
+      await configureOrt(env as Parameters<typeof configureOrt>[0]);
 
       onLoad?.(local ? "Loading on-device model…" : "Downloading AI model (~284 MB, once)…");
-      const progress_callback = (info: { status?: string; progress?: number; file?: string }) => {
-        if (!onLoad) return;
-        if (typeof info.progress === "number" && info.file) {
-          onLoad(`Downloading ${info.file.split("/").pop()}… ${Math.round(info.progress)}%`);
-        } else if (info.status === "ready") {
-          onLoad("Model ready…");
-        }
-      };
-      let summarizer;
-      try {
-        summarizer = await pipeline("summarization", MODEL, { dtype: "q8", progress_callback });
-      } catch (first) {
-        wasmPaths = await ortWasmPaths("ort-wasm-simd-threaded");
-        env.backends.onnx = {
-          ...env.backends.onnx,
-          wasm: { ...env.backends.onnx?.wasm, wasmPaths, proxy: false },
-        };
-        try {
-          summarizer = await pipeline("summarization", MODEL, { dtype: "q8", progress_callback });
-        } catch {
-          throw first;
-        }
-      }
+      const summarizer = await pipeline("summarization", MODEL, {
+        dtype: "q8",
+        progress_callback: (info: { status?: string; progress?: number; file?: string }) => {
+          if (!onLoad) return;
+          if (typeof info.progress === "number" && info.file) {
+            onLoad(`Downloading ${info.file.split("/").pop()}… ${Math.round(info.progress)}%`);
+          } else if (info.status === "ready") {
+            onLoad("Model ready…");
+          }
+        },
+      });
       return async (text: string) => {
         const out = await summarizer(text, { max_new_tokens: 96, truncation: true });
         const row = Array.isArray(out) ? out[0] : out;
@@ -101,11 +119,7 @@ async function rewriteOne(text: string, summarize: (t: string) => Promise<string
   return lang === "id" ? await translate(rewritten, "en", "id") : rewritten;
 }
 
-/**
- * One fluent rewrite of the overview (plus chapter wraps when present).
- * Uses embedded pack when present; otherwise downloads DistilBART once (needs network).
- * Indonesian text is bridged through Bergamot (model is English-centric).
- */
+/** One fluent rewrite of the overview (plus chapter wraps when present). */
 export async function rewriteSummary(
   extracted: ExtractedSummary,
   onProgress?: Progress,
