@@ -28,10 +28,11 @@ tauri-plugin-readaloud = { path = "plugins/readaloud" }
 tauri-plugin-lansync = { path = "plugins/lansync" }
 
 
-# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+# Size-oriented release. On rustc 1.93, lto=true and strip=true both break host proc-macro
+# loading (tauri_macros / phf_macros E0463). Strip the final binary after build instead.
 [profile.release]
 codegen-units = 1
-lto = true
-opt-level = 3
-panic = "abort"
-strip = true
+lto = false
+opt-level = "s"
+panic = "unwind"
+strip = false

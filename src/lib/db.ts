@@ -104,11 +104,20 @@ export interface PeerDevice {
 export interface OcrWord { text: string; box: Rect; line: number }
 export interface OcrPage { docId: string; page: number; words: OcrWord[] }
 
+// Extractive summary cached per book (local only; regenerable from texts)
+export interface DocSummary {
+  docId: string;
+  overview: string;
+  chapters: { unit: number; label: string; href?: string; text: string }[];
+  createdAt: number;
+  method: "extractive" | "abstractive";
+}
+
 let dbPromise: Promise<IDBDatabase> | undefined;
 
 function openDb() {
   return (dbPromise ??= new Promise((resolve, reject) => {
-    const r = indexedDB.open("lumaread", 7);
+    const r = indexedDB.open("lumaread", 8);
     r.onupgradeneeded = (e) => {
       const db = r.result;
       if (e.oldVersion < 1) {
@@ -158,6 +167,9 @@ function openDb() {
       if (e.oldVersion < 7) {
         db.createObjectStore("tombstones", { keyPath: "key" });
         db.createObjectStore("peers", { keyPath: "id" });
+      }
+      if (e.oldVersion < 8) {
+        db.createObjectStore("summaries", { keyPath: "docId" });
       }
     };
     r.onsuccess = () => resolve(r.result);
@@ -252,6 +264,8 @@ export const saveOcrPage = (p: OcrPage) => putAll("ocr", [p]);
 export const listSessions = (docId?: string) => getAll<Session>("sessions", docId);
 export const saveSession = (s: Session) => putAll("sessions", [s]);
 export const listOcrPages = (docId: string) => getAll<OcrPage>("ocr", docId);
+export const getSummary = (docId: string) => getOne<DocSummary>("summaries", docId);
+export const saveSummary = (s: DocSummary) => putAll("summaries", [s]);
 
 export async function findByHash(hash: string): Promise<DocMeta | undefined> {
   return req((await openDb()).transaction("docs").objectStore("docs").index("hash").get(hash));
@@ -287,7 +301,7 @@ export async function saveProgress(p: Omit<Progress, "updatedAt" | "version">) {
   return done(t);
 }
 
-const DOC_STORES = ["docs", "files", "progress", "annotations", "texts", "ocr", "sessions", "bookmarks"];
+const DOC_STORES = ["docs", "files", "progress", "annotations", "texts", "ocr", "sessions", "bookmarks", "summaries"];
 
 // Removes the document and everything derived from it in one transaction; sync won't copy it back to this device
 export async function deleteDoc(id: string) {
@@ -299,6 +313,7 @@ export async function deleteDoc(id: string) {
   t.objectStore("docs").delete(id);
   t.objectStore("files").delete(id);
   t.objectStore("progress").delete(id);
+  t.objectStore("summaries").delete(id);
   for (const store of ["annotations", "texts", "ocr", "sessions", "bookmarks"]) {
     t.objectStore(store).index("docId").openKeyCursor(IDBKeyRange.only(id)).onsuccess = (e) => {
       const cursor = (e.target as IDBRequest<IDBCursor | null>).result;

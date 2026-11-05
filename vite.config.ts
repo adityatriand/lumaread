@@ -9,12 +9,15 @@ const host = process.env.TAURI_DEV_HOST;
 
 // Runtime files that libraries fetch by URL rather than import, served from the app at /vendor/* so they work offline:
 // pdf.js decoders (JBIG2/JPEG 2000 wasm), CJK cmaps, standard fonts, ICC profiles; tesseract worker, engine, language data;
-// offline dictionaries
+// offline dictionaries; ORT wasm for optional summarization
 const require = createRequire(import.meta.url);
 const pkgDir = (name: string, from?: string) =>
   path.dirname(createRequire(from ?? import.meta.url).resolve(`${name}/package.json`));
 const pdfjs = pkgDir("pdfjs-dist");
 const tesseract = pkgDir("tesseract.js");
+// Package exports hide subpaths; resolve("onnxruntime-web") lands in dist/
+const ortDist = path.dirname(require.resolve("onnxruntime-web"));
+const SUMMARIZE_ROOT = path.resolve("data/summarization");
 
 // Generated data isn't committed; fail with the fix instead of shipping an app without it
 function dataFiles(dir: string): [string, string][] {
@@ -50,20 +53,33 @@ const VENDOR_FILES: Record<string, string> = {
       path.join(pkgDir("@browsermt/bergamot-translator"), "worker", f),
     ]),
   ),
+  // ONNX Runtime for optional DistilBART (transformers.js); always small enough to ship
+  "ort/ort-wasm-simd-threaded.jsep.mjs": path.join(ortDist, "ort-wasm-simd-threaded.jsep.mjs"),
+  "ort/ort-wasm-simd-threaded.jsep.wasm": path.join(ortDist, "ort-wasm-simd-threaded.jsep.wasm"),
   // Downloaded by scripts/fetch-translation-models.mjs
   ...Object.fromEntries(dataFiles("translation")),
   // Built by scripts/build-dictionaries.mjs
   ...Object.fromEntries(dataFiles("dictionaries")),
 };
 
+// Optional ~284 MB pack from `pnpm setup:summarize` — not required to build; copied, not emitFile'd (avoids OOM)
+function summarizeFile(urlPath: string): string | undefined {
+  if (!urlPath.startsWith("summarization/")) return undefined;
+  const file = path.resolve(SUMMARIZE_ROOT, urlPath.slice("summarization/".length));
+  if (!file.startsWith(SUMMARIZE_ROOT) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return undefined;
+  return file;
+}
+
 function vendorAssets(): Plugin {
   return {
     name: "vendor-assets",
     configureServer(server) {
       server.middlewares.use("/vendor", (req, res, next) => {
-        const file = VENDOR_FILES[decodeURIComponent((req.url ?? "").split("?")[0]).replace(/^\//, "")];
+        const url = decodeURIComponent((req.url ?? "").split("?")[0]).replace(/^\//, "");
+        const file = VENDOR_FILES[url] ?? summarizeFile(url);
         if (!file) return next();
         if (file.endsWith(".wasm")) res.setHeader("Content-Type", "application/wasm");
+        else if (file.endsWith(".onnx")) res.setHeader("Content-Type", "application/octet-stream");
         fs.createReadStream(file).pipe(res);
       });
     },
@@ -78,12 +94,32 @@ function vendorAssets(): Plugin {
         this.emitFile({ type: "asset", fileName: `vendor/${url}`, source: fs.readFileSync(file) });
       }
     },
+    writeBundle(options) {
+      // Opt-in only: default releases stay ~50 MB. Dev still serves data/ via middleware.
+      // Embed with: LUMAREAD_EMBED_SUMMARIZE=1 pnpm build
+      if (process.env.LUMAREAD_EMBED_SUMMARIZE !== "1" || !fs.existsSync(SUMMARIZE_ROOT)) return;
+      const outDir = options.dir;
+      if (!outDir) return;
+      fs.cpSync(SUMMARIZE_ROOT, path.join(outDir, "vendor/summarization"), {
+        recursive: true,
+        filter: (src) => !src.endsWith(".md"),
+      });
+    },
   };
 }
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [react(), vendorAssets()],
+  build: {
+    // Vite 8 defaults to oxc minify (no separate esbuild install)
+    minify: true,
+    cssMinify: true,
+    sourcemap: false,
+    target: "es2022",
+    chunkSizeWarningLimit: 2500,
+    // Do not manualChunks transformers/onnx — that pulled them into the entry preload and blanked the app
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

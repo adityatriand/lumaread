@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef } from "react";
 import { saveSession, type Session } from "../../lib/db";
 import { dayKey } from "./stats";
 
-const IDLE_MS = 2 * 60_000; // no input for this long = not reading (book left open)
+const IDLE_MS = 10 * 60_000; // still reading one page is normal; visibility + manual pause are the main stops
 const TICK_MS = 1_000; // the reader's on-screen timer reads it every second
 const MAX_GAP_MS = 10_000; // longest stretch one tick may credit
 const SAVE_MS = 30_000;
 const MIN_SESSION_MS = 10_000; // opening a book by mistake isn't a session
 
-// reading = time counts; idle = auto-paused (window hidden or no input for 2 minutes); paused = the reader paused it
+// reading = time counts; idle = auto-paused (window hidden or no input for 10 minutes); paused = the reader paused it
 export type SessionState = "reading" | "idle" | "paused";
 
 export interface ReadingSession {

@@ -2,7 +2,7 @@ import { MoreHorizontal } from "lucide-react";
 import { formatSize, timeAgo } from "../../lib/format";
 import type { LibraryItem } from "./types";
 
-interface Props { item: LibraryItem; onOpen: () => void; onRemove: () => void; onStats?: () => void; onEdit?: () => void; onReset?: () => void; onShelves?: () => void }
+interface Props { item: LibraryItem; onOpen: () => void; onRemove: () => void; onStats?: () => void; onSummary?: () => void; onEdit?: () => void; onReset?: () => void; onShelves?: () => void }
 
 // What the reader imported (CBZ, TXT, MD), not the EPUB it became
 export const formatLabel = (doc: LibraryItem["doc"]) => (doc.source ?? doc.format).toUpperCase();
@@ -24,7 +24,7 @@ export function ProgressBar({ percent }: { percent: number }) {
   );
 }
 
-export function DocRow({ item, onOpen, onRemove, onStats, onEdit, onReset, onShelves }: Props) {
+export function DocRow({ item, onOpen, onRemove, onStats, onSummary, onEdit, onReset, onShelves }: Props) {
   const { doc, progress } = item;
   return (
     <li className="doc-row">
@@ -51,6 +51,7 @@ export function DocRow({ item, onOpen, onRemove, onStats, onEdit, onReset, onShe
         <div className="menu-items">
           {onEdit && <button className="menu-neutral" onClick={(e) => (e.currentTarget.closest("details")?.removeAttribute("open"), onEdit())}>Edit details</button>}
           {onShelves && <button className="menu-neutral" onClick={(e) => (e.currentTarget.closest("details")?.removeAttribute("open"), onShelves())}>Shelves…</button>}
+          {onSummary && <button className="menu-neutral" onClick={(e) => (e.currentTarget.closest("details")?.removeAttribute("open"), onSummary())}>Summary</button>}
           {onStats && <button className="menu-neutral" onClick={onStats}>Reading stats</button>}
           {onReset && (progress || doc.openedAt) && (
             <button className="menu-neutral" onClick={(e) => (e.currentTarget.closest("details")?.removeAttribute("open"), onReset())}>Reset progress</button>

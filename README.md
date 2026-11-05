@@ -55,6 +55,7 @@ Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and 
 | | |
 | :-- | :-- |
 | 🖍️ **Highlights & notes** | 4 colours, notes on highlights or whole documents, copy a quote with its source |
+| 🧾 **Summary** | On-device extractive overview + per-chapter key sentences (library ⋮ → Summary). Optional DistilBART rewrite via `pnpm setup:summarize` (~284 MB) — still fully offline, never uploaded |
 | 📤 **Export** | Markdown or CSV through the system save dialog. CSV is formula-safe with a UTF-8 BOM |
 | 🔎 **Search** | Titles, book text, highlights and notes, ignoring case and accents. Results open the right page or chapter (⌘K / Ctrl+K) |
 | 🔤 **OCR** | tesseract.js (Indonesian + English) for scanned PDFs. The page being read is recognised automatically; recognised words are selectable, highlightable and searchable |
@@ -64,7 +65,7 @@ Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and 
 ### Habits & sharing
 | | |
 | :-- | :-- |
-| ⏱️ **Reading timer** | Total time on the book. Pauses itself when the window is hidden or after 2 minutes without input; tap to pause or resume |
+| ⏱️ **Reading timer** | Total time on the book. Pauses itself when the window is hidden or after 10 minutes without input; tap to pause or resume |
 | 📊 **Reading stats** | Active time, pages, streaks, pace and time left, for 7 / 30 / 90 days, all books or one, as charts or tables |
 | 🏆 **Achievement cards** | Story or square image with a bar or line chart (days on the x axis, minutes on the y axis) |
 | 💬 **Quote cards** | Any highlight as a 1080×1920 story or 1080×1080 square (Luma / Paper / Night). Android opens the system share sheet; desktop saves or copies the image |
@@ -89,12 +90,13 @@ Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and 
 git clone https://github.com/adityatriand/lumaread.git
 cd lumaread
 pnpm install
-pnpm setup:data   # once: builds data/dictionaries (~16 MB), downloads and verifies data/translation (~41 MB)
-pnpm tauri dev    # desktop dev window
+pnpm setup:data        # once: builds data/dictionaries (~16 MB), downloads and verifies data/translation (~41 MB)
+pnpm setup:summarize   # optional: DistilBART ONNX for AI summary rewrite (~284 MB)
+pnpm tauri dev         # desktop dev window
 ```
 
 > [!NOTE]
-> `data/` is generated, not committed (only `data/dictionaries/ATTRIBUTION.md` is tracked). If it's missing, the build stops and tells you to run `pnpm setup:data`.
+> `data/` is generated, not committed (attribution files stay tracked). If dictionaries/translation are missing, the build stops and tells you to run `pnpm setup:data`. The summarization pack is optional — without it, Summary stays extractive.
 
 ## Development
 
@@ -104,6 +106,7 @@ pnpm tauri dev    # desktop dev window
 | `pnpm build` | Type-check + web build |
 | `pnpm test` | Unit tests (Vitest) |
 | `pnpm test:e2e` | Playwright in Chrome (stands in for the Android WebView) and WebKit (for the macOS app), against `vite preview` with the app's CSP |
+| `pnpm setup:summarize` | Optional DistilBART ONNX pack (~284 MB) for AI summary rewrite |
 | `pnpm tauri android dev` | Android dev build |
 
 ```sh
@@ -123,6 +126,7 @@ E2E tests stub `globalThis.isTauri` and Tauri's IPC to drive the UI in a browser
 - **Read aloud:** macOS uses the webview's `speechSynthesis`. The Android WebView has none, so `src-tauri/plugins/readaloud` drives Android's TextToSpeech. Indonesian may need an offline voice installed in Android Settings → Text-to-speech.
 - **Wi-Fi sync:** devices find each other by UDP broadcast on port 47321 and talk over TCP while the Sync page is open. Pairing is ECDH (P-256) confirmed by a 6-digit code on both screens; messages are AES-256-GCM encrypted in the web app, so the native side only relays ciphertext. macOS 15+ asks once for Local Network access (`src-tauri/Info.plist`); Android holds a multicast lock only while syncing.
 - **EPUB in WebKit:** `allowScriptedContent` is needed for selection, links and keys to work in the macOS app; book scripts stay blocked by an injected CSP.
+- **Pinch zoom:** the viewport and Android WebView refuse page zoom so chrome stays usable; enlarge EPUB text with A+/A− and PDF with the Zoom control.
 
 </details>
 
@@ -155,7 +159,7 @@ flowchart LR
   subgraph App["Webview (React)"]
     R["Reader<br/>PDF · EPUB engines"] --> F["Highlights · Bookmarks · OCR<br/>Lookup · Read aloud · Stats"]
   end
-  DB[("IndexedDB v7")]
+  DB[("IndexedDB v8")]
   V["/vendor/* offline assets<br/>pdf.js · tesseract · Bergamot · dictionaries"]
   App --> DB
   App --> V
@@ -168,7 +172,7 @@ Reader engines take and emit LumaRead's own anchors (`src/lib/anchor.ts`), never
 <summary><b>Project layout</b></summary>
 
 ```
-src/lib/                       db.ts (IndexedDB v7), anchor.ts, hash.ts, pdf.ts, rects.ts, saveFile.ts, zip.ts
+src/lib/                       db.ts (IndexedDB v8), anchor.ts, hash.ts, pdf.ts, rects.ts, saveFile.ts, zip.ts
 src/components/                AppShell, Select, ConfirmDialog, useOutsideClose
 src/features/library/          import (+ CBZ/TXT/MD → EPUB in convert.ts), Home, Library, shelves
 src/features/reader/           ReaderView, PdfReader, EpubReader, ReaderChrome, BookmarkMenu, FindBar
@@ -176,13 +180,14 @@ src/features/bookmarks/        Bookmarks page
 src/features/sync/             merge rules, wire format + crypto, pairing & sync protocol, Sync page
 src/features/readaloud/        speech (voices + sentence chunks), playback hook, player bar
 src/features/notebook/         Highlights & Notes, editor, Markdown/CSV export
+src/features/summary/          extractive TF–IDF + optional DistilBART rewrite (abstractive.ts)
 src/features/search/           text indexing (+ scanned-PDF detection), search
 src/features/ocr/              tesseract worker, OCR queue, selectable OCR text layer
 src/features/lookup/           dictionary, stemmers, Bergamot translation client
 src/features/stats/            reading sessions, timer, charts, Stats page, achievement card
 src/features/share/            card canvas, quote card, share dialog
 src/features/settings/         reading prefs, privacy, licences
-scripts/                       build-dictionaries.mjs, fetch-translation-models.mjs
+scripts/                       build-dictionaries, fetch-translation-models, fetch-summarization-model
 vite.config.ts                 vendor-assets plugin: serves offline runtime files at /vendor/*
 src-tauri/                     Rust shell, CSP, capabilities, Android project in gen/android
 src-tauri/plugins/quoteshare/  Android share sheet via FileProvider (no storage permission)
@@ -190,7 +195,7 @@ src-tauri/plugins/readaloud/   Android TextToSpeech for read aloud
 src-tauri/plugins/lansync/     Wi-Fi sync transport: UDP discovery + TCP relay of encrypted messages
 ```
 
-Size added by offline features: pdf.js assets 3.5 MB, OCR 7.8 MB, dictionaries ~16 MB (JSON, compresses well), translation ~46 MB.
+Size added by offline features: pdf.js assets 3.5 MB, OCR 7.8 MB, dictionaries ~16 MB (JSON, compresses well), translation ~46 MB. Optional summarization pack ~284 MB.
 
 </details>
 
@@ -204,6 +209,7 @@ LumaRead stands on these open projects (also listed in the app under Settings �
 | EPUB rendering | epub.js — FuturePress | BSD-2-Clause |
 | Text recognition (OCR) | Tesseract & tesseract.js, Indonesian and English data | Apache-2.0 |
 | Offline translation | Bergamot translator & Firefox Translations models — Mozilla | MPL-2.0 |
+| Optional book summary (AI) | DistilBART CNN 6-6 ONNX — Xenova / sshleifer; Transformers.js | Apache-2.0 |
 | English dictionary | Open English WordNet 2025 contributors | CC BY 4.0 |
 | Indonesian dictionary | Wiktionary contributors, via kaikki.org (first three senses) | CC BY-SA 4.0 |
 | Reading typeface | Source Serif 4 — Adobe | SIL OFL 1.1 |

@@ -2,4 +2,6 @@
 allowBuilds:
   core-js: false
   es5-ext: false
+  onnxruntime-node: set this to true or false
+  protobufjs: set this to true or false
   tesseract.js: false

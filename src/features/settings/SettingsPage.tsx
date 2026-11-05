@@ -12,6 +12,7 @@ const CREDITS: [string, string, string][] = [
   ["EPUB rendering", "epub.js — FuturePress", "BSD-2-Clause"],
   ["Text recognition (OCR)", "Tesseract & tesseract.js, Indonesian and English language data", "Apache-2.0"],
   ["Offline translation", "Bergamot translator & Firefox Translations models — Mozilla", "MPL-2.0"],
+  ["Optional book summary (AI)", "DistilBART CNN 6-6 ONNX — Xenova / sshleifer; Transformers.js", "Apache-2.0"],
   ["English dictionary", "Open English WordNet 2025 — Open English WordNet contributors", "CC BY 4.0"],
   ["Indonesian dictionary", "Wiktionary contributors, extracted by kaikki.org; adapted (first three senses)", "CC BY-SA 4.0"],
   ["Reading typeface", "Source Serif 4 — Adobe", "SIL OFL 1.1"],

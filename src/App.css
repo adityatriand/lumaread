@@ -221,6 +221,8 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .reader-top, .reader-bar.footer { transition: none; } }
 .reader-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .reader-heading h1 { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader-heading .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader-bar.footer > span { min-width: 0; max-width: min(52vw, calc(100% - 200px)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reader-bar select { max-width: 160px; }
 .reader-body { flex: 1; position: relative; min-height: 0; margin: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
 :root.mac .reader-body { margin-top: 28px; } /* keeps the window buttons off the text */
@@ -296,6 +298,13 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .text-input:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
 .field textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; resize: vertical; }
 .dialog-actions { display: flex; justify-content: space-between; }
+.summary-body { display: grid; gap: 16px; max-height: min(60vh, 520px); overflow-y: auto; }
+.summary-body h3 { margin: 0 0 6px; font-size: 0.85rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.summary-text { margin: 0; font-family: "Source Serif 4 Variable", "Noto Serif", serif; line-height: 1.55; }
+.summary-chapters { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+.summary-chapters strong { display: block; margin-bottom: 4px; font-size: 0.95rem; }
+.summary-actions { align-items: center; gap: 12px; }
+.summary-actions .button { display: inline-flex; align-items: center; gap: 6px; }
 /* Library filters and shelves */
 .library-filters { margin: 12px 0; }
 .library-filters .select { flex: 1 1 160px; }
@@ -497,4 +506,7 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
   .filter-row > * { flex: 1 1 100%; }
   .page-header h1 { font-size: 1.3rem; }
   .reader-heading h1 { font-size: 0.9rem; }
+  /* Location lives in the footer; keeping it in the header fights Find / Read aloud / Bookmark / Chapters */
+  .reader-heading .muted { display: none; }
+  .reader-bar .select-button { min-width: 0; max-width: 112px; }
 }

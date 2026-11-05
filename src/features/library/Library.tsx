@@ -12,6 +12,7 @@ interface Props {
   onRemove: (item: LibraryItem) => void;
   onImported: () => void;
   onStats: (item: LibraryItem) => void;
+  onSummary: (item: LibraryItem) => void;
   onEdit: (item: LibraryItem) => void;
   onReset: (item: LibraryItem) => void;
   onShelves: (item: LibraryItem) => void;
@@ -53,7 +54,7 @@ function loadView(): View {
   }
 }
 
-export function Library({ items, onOpen, onRemove, onImported, onStats, onEdit, onReset, onShelves, onRenameShelf, onDeleteShelf }: Props) {
+export function Library({ items, onOpen, onRemove, onImported, onStats, onSummary, onEdit, onReset, onShelves, onRenameShelf, onDeleteShelf }: Props) {
   const [tab, setTab] = useState(0);
   const [view, setView] = useState(loadView);
   const [managing, setManaging] = useState(false);
@@ -149,7 +150,7 @@ export function Library({ items, onOpen, onRemove, onImported, onStats, onEdit, 
       ) : (
         <ul className="doc-list card">
           {shown.map((item) => (
-            <DocRow key={item.doc.id} item={item} onOpen={() => onOpen(item)} onRemove={() => onRemove(item)} onStats={() => onStats(item)} onEdit={() => onEdit(item)} onReset={() => onReset(item)} onShelves={() => onShelves(item)} />
+            <DocRow key={item.doc.id} item={item} onOpen={() => onOpen(item)} onRemove={() => onRemove(item)} onStats={() => onStats(item)} onSummary={() => onSummary(item)} onEdit={() => onEdit(item)} onReset={() => onReset(item)} onShelves={() => onShelves(item)} />
           ))}
         </ul>
       )}

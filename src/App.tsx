@@ -17,6 +17,7 @@ import { StatsPage } from "./features/stats/StatsPage";
 import { SyncPage } from "./features/sync/SyncPage";
 import { applyAppTheme, loadPrefs, storePrefs, type ReadingPrefs } from "./features/settings/prefs";
 import { SettingsPage } from "./features/settings/SettingsPage";
+import { SummaryDialog } from "./features/summary/SummaryDialog";
 import "@fontsource-variable/source-serif-4/wght.css";
 import "./App.css";
 
@@ -33,6 +34,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<DocMeta>();
   const [shelving, setShelving] = useState<DocMeta>();
+  const [summarizing, setSummarizing] = useState<DocMeta>();
   const openIdRef = useRef<string>(null);
   // Opened at a highlight, note or search hit: last-read stays put until the reader moves away from that spot.
   // Holds the first location reported after the jump (undefined = not reported yet, null = not a jump)
@@ -160,7 +162,7 @@ export default function App() {
   }
 
   const showStats = (item: LibraryItem) => (setStatsDocId(item.doc.id), setView("stats"));
-  const pageProps = { items, onOpen: (item: LibraryItem) => openDoc(item), onRemove: removeDoc, onImported: imported, onStats: showStats, onEdit: (item: LibraryItem) => setEditing(item.doc), onReset: resetProgress, onShelves: (item: LibraryItem) => setShelving(item.doc) };
+  const pageProps = { items, onOpen: (item: LibraryItem) => openDoc(item), onRemove: removeDoc, onImported: imported, onStats: showStats, onSummary: (item: LibraryItem) => setSummarizing(item.doc), onEdit: (item: LibraryItem) => setEditing(item.doc), onReset: resetProgress, onShelves: (item: LibraryItem) => setShelving(item.doc) };
   return (
     <AppShell view={view} query={query} onNavigate={setView} onSearch={(q) => (setQuery(q), q && setView("search"))}>
       {banner}
@@ -188,6 +190,7 @@ export default function App() {
           onClose={() => setEditing(undefined)}
         />
       )}
+      {summarizing && <SummaryDialog doc={summarizing} onClose={() => setSummarizing(undefined)} />}
     </AppShell>
   );
 }

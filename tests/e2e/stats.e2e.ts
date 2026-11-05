@@ -38,18 +38,20 @@ test("reading time, pages and streak are tracked and shown per book and overall"
     await page.locator(".pdf-container").click();
     await page.clock.runFor(30_000);
   }
-  // Leaving the book for 5 minutes without input must not count
-  await page.clock.runFor(5 * 60_000);
+  // Past the 10-minute idle window: time after idle must not count
+  await page.clock.runFor(11 * 60_000);
   await page.getByLabel("Back to library").click();
 
   await expect.poll(async () => (await idb<{ id: string; activeMs: number; pages: number }>(page, "sessions")).find((s) => !s.id.startsWith("seed"))).toMatchObject({ pages: 2 });
   const live = (await idb<{ id: string; activeMs: number }>(page, "sessions")).find((s) => !s.id.startsWith("seed"))!;
+  // ~3m reading + up to 10m trailing before idle; the 11th minute dropped
   expect(live.activeMs).toBeGreaterThanOrEqual(3 * 60_000);
-  expect(live.activeMs).toBeLessThan(5 * 60_000);
+  expect(live.activeMs).toBeLessThan(3 * 60_000 + 11 * 60_000);
+  expect(live.activeMs).toBeLessThanOrEqual(3 * 60_000 + 10 * 60_000 + 15_000);
 
   await page.getByRole("button", { name: "Stats" }).first().click();
   const tiles = page.locator(".stat-tiles");
-  await expect(page.locator(".hero-figure")).toHaveText(/^2[0-9]m$/); // 20m seeded + ~3–4m today
+  await expect(page.locator(".hero-figure")).toHaveText(/^3[0-9]m$/); // 20m seeded + ~13m today
   await expect(tiles).toContainText("Pages read6");
   await expect(tiles).toContainText("Current streak3 days");
   await expect(tiles).toContainText("Days read3 / 7");

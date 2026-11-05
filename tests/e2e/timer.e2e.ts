@@ -17,8 +17,8 @@ test("reading timer counts active time, idles on its own, and pauses or resumes 
   }
   await expect(timer).toHaveText(/^1:0\d$/);
 
-  // No input for 3 minutes: auto-paused as idle
-  await page.clock.runFor(3 * 60_000);
+  // No input for 11 minutes: auto-paused as idle (10 min threshold)
+  await page.clock.runFor(11 * 60_000);
   await expect(timer).toContainText("Idle");
   const idle = (await timer.locator(".timer-time").textContent())!;
   await page.clock.runFor(60_000);
