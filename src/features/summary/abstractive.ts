@@ -48,27 +48,26 @@ async function rewriteOne(text: string, summarize: (t: string) => Promise<string
 }
 
 /**
- * Fluent rewrite of an extractive summary using DistilBART on-device.
+ * One fluent rewrite of the overview (plus chapter wraps when present).
  * Indonesian text is bridged through Bergamot (model is English-centric).
  */
 export async function rewriteSummary(extracted: ExtractedSummary, onProgress?: Progress): Promise<ExtractedSummary> {
   if (!(await summarizationPackAvailable())) throw new Error("Summarization pack not installed");
   const summarize = await loadPipe();
-  const chapters = extracted.chapters.slice(0, 40); // hard cap: phones shouldn't grind for an hour
-  const total = 1 + chapters.length;
+  // Cap chapter rewrites; page-mode extractive already has chapters: []
+  const chapters = extracted.chapters.slice(0, 12);
+  const total = Math.max(1, (extracted.overview ? 1 : 0) + chapters.length);
   let done = 0;
   const tick = () => onProgress?.(++done, total);
 
   const overview = extracted.overview ? await rewriteOne(extracted.overview, summarize) : "";
-  tick();
+  if (extracted.overview) tick();
 
   const outChapters = [];
   for (const c of chapters) {
     outChapters.push({ ...c, text: await rewriteOne(c.text, summarize) });
     tick();
   }
-  // Chapters beyond the cap stay as extractive picks
-  if (extracted.chapters.length > chapters.length) outChapters.push(...extracted.chapters.slice(chapters.length));
 
   return { overview, chapters: outChapters };
 }

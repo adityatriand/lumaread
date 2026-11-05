@@ -113,7 +113,7 @@ export function SummaryDialog({ doc, onClose }: Props) {
             <p className="muted small">{methodNote}</p>
             {summary.overview && (
               <section>
-                <h3>Overview</h3>
+                {summary.chapters.length > 0 && <h3>Overview</h3>}
                 <p className="summary-text">{summary.overview}</p>
               </section>
             )}

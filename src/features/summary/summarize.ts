@@ -16,6 +16,9 @@ export interface ExtractedSummary {
 const MIN_UNIT_CHARS = 180;
 const PER_CHAPTER = 2;
 const OVERVIEW = 5;
+const PAGE_OVERVIEW = 12;
+
+const isPageLabel = (label: string) => /^page\s+\d+/i.test(label.trim());
 
 // Small EN + ID set so frequency scoring ignores glue words
 const STOP = new Set(
@@ -68,11 +71,14 @@ function pickSentences(pool: string[], n: number): string[] {
   return pool.filter((_, i) => chosen.has(i));
 }
 
-/** Extractive overview + per-chapter picks from already-indexed book text. No network, no model. */
+/** Extractive overview (+ chapter picks for real chapters). PDFs stay one wrap — no per-page list. */
 export function summarizeBook(texts: DocText[]): ExtractedSummary {
   const units = [...texts]
     .filter((t) => t.text.replace(/\s/g, "").length >= MIN_UNIT_CHARS)
     .sort((a, b) => a.unit - b.unit);
+
+  // PDF/OCR units are "Page N"; dumping each page is not a summary
+  const pageMode = units.length > 0 && units.every((u) => isPageLabel(u.label));
 
   const chapters: ChapterSummary[] = [];
   const overviewPool: string[] = [];
@@ -80,10 +86,13 @@ export function summarizeBook(texts: DocText[]): ExtractedSummary {
   for (const unit of units) {
     const picked = pickSentences(sentences(unit.text), PER_CHAPTER);
     if (!picked.length) continue;
-    chapters.push({ unit: unit.unit, label: unit.label, href: unit.href, text: picked.join(" ") });
+    if (!pageMode) {
+      chapters.push({ unit: unit.unit, label: unit.label, href: unit.href, text: picked.join(" ") });
+    }
     overviewPool.push(...picked);
   }
 
-  const overview = pickSentences(overviewPool, OVERVIEW).join(" ");
+  const n = pageMode ? PAGE_OVERVIEW : OVERVIEW;
+  const overview = pickSentences(overviewPool, n).join(" ");
   return { overview, chapters };
 }

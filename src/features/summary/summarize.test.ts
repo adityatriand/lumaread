@@ -46,4 +46,22 @@ describe("summarizeBook", () => {
     ]);
     expect(result.chapters).toEqual([expect.objectContaining({ label: "Nav", href: "nav.xhtml" })]);
   });
+
+  it("collapses PDF page units into a single overview wrap", () => {
+    const a = long(
+      "Detective Kusanagi reviews the arsenic timeline with clinical care",
+      "Witness statements conflict about who prepared the coffee that morning at home.",
+    );
+    const b = long(
+      "Yoshitaka's death forces the team to rethink the marriage motive",
+      "Ayane remains composed while colleagues notice small inconsistencies in her account.",
+    );
+    const result = summarizeBook([
+      unit(274, a, "Page 274"),
+      unit(275, b, "Page 275"),
+    ]);
+    expect(result.chapters).toEqual([]);
+    expect(result.overview.length).toBeGreaterThan(40);
+    expect(result.overview.toLowerCase()).toMatch(/arsenic|yoshitaka|ayane|kusanagi|marriage|coffee/);
+  });
 });
