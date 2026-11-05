@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DocText } from "../../lib/db";
-import { chunkBookForSummary, summarizeBook } from "./summarize";
+import { chunkBookForSummary, isOcrJunk, summarizeBook } from "./summarize";
 
 const unit = (n: number, text: string, label = `Chapter ${n}`): DocText => ({
   docId: "b",
@@ -91,6 +91,15 @@ describe("summarizeBook", () => {
     expect(result.chapters).toEqual([]);
     expect(result.overview.toLowerCase()).not.toMatch(/hak cipta|isbn|gramedia|edogawa|naoki/);
     expect(result.overview.toLowerCase()).toMatch(/ayane|pansies|investigators|patchwork/);
+  });
+
+  it("drops OCR glyph salad like = le) Q + ©", () => {
+    expect(
+      isOcrJunk("= le) Q + © oy 70] en 2 © = o = R= Pa 70] Q 0 memberitahukan latar belakangnya padamu."),
+    ).toBe(true);
+    expect(
+      isOcrJunk("Ayane quietly waters the pansies while the investigators wait downstairs for answers."),
+    ).toBe(false);
   });
 
   it("chunks the whole PDF body so every page is covered", () => {

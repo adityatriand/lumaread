@@ -15,7 +15,7 @@ export interface ExtractedSummary {
 
 const MIN_UNIT_CHARS = 180;
 const PER_UNIT = 1;
-const OVERVIEW_CAP = 28;
+const OVERVIEW_CAP = 10;
 const PAGE_SEGMENTS = 4;
 const CHUNK_TARGET = 1400;
 const CHUNK_MAX = 24;
@@ -36,17 +36,28 @@ const STOP = new Set(
 
 export function cleanSummaryText(text: string): string {
   return text
-    .replace(/[|°~•]+/g, " ")
+    .replace(/[|°~•■□▪▫◆◇●○]+/g, " ")
+    .replace(/[=©®™§]+/g, " ")
+    .replace(/(?:^|\s)[QRo0]\s*[+=].*$/g, " ")
     .replace(/(\p{L})\s+\d{1,4}\s+(\p{L})/gu, "$1 $2")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function isBoilerplate(s: string): boolean {
-  if (BOILERPLATE.test(s)) return true;
-  if (/\b97[89][\d-]{10,}\b/.test(s)) return true;
-  if ((s.match(/[|/]/g) ?? []).length >= 3) return true;
-  if (/\b(yen|rupiah|€|£)\b/i.test(s) || (/\b(dollar|dollars)\b/i.test(s) && /\d/.test(s))) return true;
+/** Drop OCR chrome / glyph salad that is not readable prose. */
+export function isOcrJunk(s: string): boolean {
+  const cleaned = cleanSummaryText(s);
+  if (cleaned.length < 40) return true;
+  const letters = (cleaned.match(/\p{L}/gu) ?? []).length;
+  const compact = cleaned.replace(/\s/g, "");
+  if (!compact.length || letters / compact.length < 0.78) return true;
+  if ((cleaned.match(/[|/\\_=+<>©®™§]/g) ?? []).length >= 3) return true;
+  // "E a 7 3 memperlihatkan…" — scattered single-char tokens
+  const singles = cleaned.match(/(?:^|\s)[\p{L}\d](?=\s|$)/gu) ?? [];
+  if (singles.length >= 4) return true;
+  if (/\b97[89][\d-]{10,}\b/.test(cleaned)) return true;
+  if (BOILERPLATE.test(cleaned)) return true;
+  if (/\b(yen|rupiah|€|£)\b/i.test(cleaned) || (/\b(dollar|dollars)\b/i.test(cleaned) && /\d/.test(cleaned))) return true;
   return false;
 }
 
@@ -54,7 +65,7 @@ function sentences(text: string): string[] {
   return cleanSummaryText(text)
     .split(/(?<=[.!?…])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length >= 40 && /[\p{L}]/u.test(s) && !isBoilerplate(s));
+    .filter((s) => !isOcrJunk(s));
 }
 
 function tokens(s: string): string[] {
@@ -78,6 +89,9 @@ function pickSentences(pool: string[], n: number): string[] {
       const idf = Math.log((N + 1) / ((df.get(w) ?? 0) + 1));
       score += (c / words.length) * (0.35 + 0.65 * idf);
     }
+    // Prefer narrative over pure dialogue scraps
+    const dialogueHeavy = (pool[i].match(/["“”']/g) ?? []).length >= 2;
+    if (dialogueHeavy) score *= 0.55;
     score *= 1 + Math.max(0, 0.1 - i / Math.max(N, 1));
     return { i, score };
   });
@@ -119,13 +133,17 @@ export function bookBodyUnits(texts: DocText[]): DocText[] {
   return units.filter((_, index) => inBody(index, units.length));
 }
 
+function cleanBookProse(text: string): string {
+  return sentences(text).join(" ");
+}
+
 /**
  * Split the whole book body into ordered chunks that cover every page.
  * Hard-capped at maxChunks — chunk size grows for long books (DistilBART map budget).
  */
 export function chunkBookForSummary(texts: DocText[], maxChunks = CHUNK_MAX, targetChars = CHUNK_TARGET): string[] {
   const parts = bookBodyUnits(texts)
-    .map((u) => cleanSummaryText(u.text))
+    .map((u) => cleanBookProse(u.text))
     .filter((t) => t.length >= 80);
   if (!parts.length) return [];
 
@@ -144,7 +162,6 @@ export function chunkBookForSummary(texts: DocText[], maxChunks = CHUNK_MAX, tar
   }
   if (buf.trim()) chunks.push(buf.trim());
 
-  // Sentence boundaries can overshoot — merge adjacent until ≤ maxChunks
   while (chunks.length > maxChunks) {
     const step = Math.ceil(chunks.length / maxChunks);
     const merged: string[] = [];
@@ -175,14 +192,12 @@ export function summarizeBook(texts: DocText[]): ExtractedSummary {
   for (const unit of body) {
     const picked = pickSentences(sentences(unit.text), PER_UNIT);
     if (!picked.length) continue;
-    // EPUB: keep short chapter rows; PDFs collapse to one wrap only
     if (!pageMode) {
       chapters.push({ unit: unit.unit, label: unit.label, href: unit.href, text: picked.join(" ") });
     }
     overviewPool.push(...picked);
   }
 
-  // Always one overview covering the full body (every unit contributed when possible)
-  const overview = sampleAcross(overviewPool, Math.min(OVERVIEW_CAP, Math.max(8, overviewPool.length))).join(" ");
+  const overview = sampleAcross(overviewPool, Math.min(OVERVIEW_CAP, Math.max(6, overviewPool.length))).join(" ");
   return { overview, chapters: pageMode ? [] : chapters };
 }
