@@ -21,12 +21,8 @@ export function summarizationPackAvailable() {
     .catch(() => false));
 }
 
-/** Tauri asset protocol often serves .mjs with a non-JS MIME; blob URLs make module import work. */
-async function ortWasmPaths(): Promise<{ mjs: string; wasm: string }> {
-  // transformers.js defaults to asyncify (Safari <26 without WebGPU uses plain)
-  const safariOld = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-    && !("gpu" in navigator);
-  const stem = safariOld ? "ort-wasm-simd-threaded" : "ort-wasm-simd-threaded.asyncify";
+/** Fetch ORT files and expose as blob: URLs (Tauri MIME + CSP need blob: in script-src). */
+async function ortWasmPaths(stem: string): Promise<{ mjs: string; wasm: string }> {
   const [mjsRes, wasmRes] = await Promise.all([
     fetch(vendor(`ort/${stem}.mjs`)),
     fetch(vendor(`ort/${stem}.wasm`)),
@@ -50,24 +46,38 @@ async function loadPipe(onLoad?: LoadProgress) {
       env.allowRemoteModels = !local;
       env.allowLocalModels = local;
       if (local) env.localModelPath = vendor("summarization/");
-      const wasmPaths = await ortWasmPaths();
+      env.useWasmCache = true;
+      // asyncify is transformers' default; plain is a fallback if asyncify fails to init
+      let wasmPaths = await ortWasmPaths("ort-wasm-simd-threaded.asyncify");
       env.backends.onnx = {
         ...env.backends.onnx,
         wasm: { ...env.backends.onnx?.wasm, wasmPaths, proxy: false },
       };
 
       onLoad?.(local ? "Loading on-device model…" : "Downloading AI model (~284 MB, once)…");
-      const summarizer = await pipeline("summarization", MODEL, {
-        dtype: "q8",
-        progress_callback: (info: { status?: string; progress?: number; file?: string }) => {
-          if (!onLoad) return;
-          if (typeof info.progress === "number" && info.file) {
-            onLoad(`Downloading ${info.file.split("/").pop()}… ${Math.round(info.progress)}%`);
-          } else if (info.status === "ready") {
-            onLoad("Model ready…");
-          }
-        },
-      });
+      const progress_callback = (info: { status?: string; progress?: number; file?: string }) => {
+        if (!onLoad) return;
+        if (typeof info.progress === "number" && info.file) {
+          onLoad(`Downloading ${info.file.split("/").pop()}… ${Math.round(info.progress)}%`);
+        } else if (info.status === "ready") {
+          onLoad("Model ready…");
+        }
+      };
+      let summarizer;
+      try {
+        summarizer = await pipeline("summarization", MODEL, { dtype: "q8", progress_callback });
+      } catch (first) {
+        wasmPaths = await ortWasmPaths("ort-wasm-simd-threaded");
+        env.backends.onnx = {
+          ...env.backends.onnx,
+          wasm: { ...env.backends.onnx?.wasm, wasmPaths, proxy: false },
+        };
+        try {
+          summarizer = await pipeline("summarization", MODEL, { dtype: "q8", progress_callback });
+        } catch {
+          throw first;
+        }
+      }
       return async (text: string) => {
         const out = await summarizer(text, { max_new_tokens: 96, truncation: true });
         const row = Array.isArray(out) ? out[0] : out;
