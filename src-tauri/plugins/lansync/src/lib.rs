@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::{
     collections::HashMap,
     io::{self, Read, Write},
-    net::{TcpListener, TcpStream, UdpSocket},
+    net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream, UdpSocket},
     sync::{
         atomic::{AtomicBool, AtomicU32, Ordering},
         mpsc, Arc, Mutex,
@@ -85,12 +85,42 @@ fn serve(mut s: TcpStream, waiting: Arc<Mutex<HashMap<u32, mpsc::Sender<Vec<u8>>
     write_frame(&mut s, &reply?)
 }
 
-// The discovery port can still be held by the previous session's thread for a moment after a restart
-fn bind_discovery() -> io::Result<UdpSocket> {
+// Every IPv4 subnet this machine is on, plus the limited broadcast. macOS often sends
+// 255.255.255.255 out the wrong interface (a VPN or bridge), so peers on Wi-Fi never hear it
+// and a paired device stays "Not found" with Sync now disabled.
+fn announce_targets(port: u16) -> Vec<SocketAddr> {
+    let mut targets = vec![SocketAddr::from((Ipv4Addr::BROADCAST, port))];
+    if let Ok(list) = if_addrs::get_if_addrs() {
+        for iface in list {
+            let if_addrs::IfAddr::V4(v4) = iface.addr else { continue };
+            let Some(bcast) = v4.broadcast else { continue };
+            if bcast.is_unspecified() || bcast.is_loopback() {
+                continue;
+            }
+            targets.push(SocketAddr::from((bcast, port)));
+        }
+    }
+    targets.sort_unstable();
+    targets.dedup();
+    targets
+}
+
+// The discovery port can still be held by the previous session's thread for a moment after a restart.
+// Reuse lets a second copy on this Mac (the installed app and a dev build) hear the same broadcasts.
+fn bind_discovery(port: u16) -> io::Result<UdpSocket> {
+    use socket2::{Domain, Socket, Type};
     let mut last = None;
     for _ in 0..20 {
-        match UdpSocket::bind(("0.0.0.0", DISCOVERY_PORT)) {
-            Ok(s) => return Ok(s),
+        let socket = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+        socket.set_reuse_address(true)?;
+        #[cfg(unix)]
+        let _ = socket.set_reuse_port(true);
+        socket.set_broadcast(true)?;
+        match socket.bind(&SocketAddr::from((Ipv4Addr::UNSPECIFIED, port)).into()) {
+            Ok(()) => {
+                socket.set_read_timeout(Some(Duration::from_millis(500)))?;
+                return Ok(UdpSocket::from(socket));
+            }
             Err(e) => last = Some(e),
         }
         thread::sleep(Duration::from_millis(100));
@@ -111,9 +141,7 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
     let listener = TcpListener::bind(("0.0.0.0", 0)).map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     listener.set_nonblocking(true).map_err(|e| e.to_string())?; // lets the loop notice a stop
-    let udp = bind_discovery().map_err(|e| format!("Sync couldn't listen on this network: {e}"))?;
-    udp.set_broadcast(true).map_err(|e| e.to_string())?;
-    udp.set_read_timeout(Some(Duration::from_millis(500))).map_err(|e| e.to_string())?;
+    let udp = bind_discovery(DISCOVERY_PORT).map_err(|e| format!("Sync couldn't listen on this network: {e}"))?;
 
     {
         let (run, waiting, next) = (run.clone(), state.waiting.clone(), state.next.clone());
@@ -134,10 +162,13 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
         let announce = serde_json::json!({ "magic": MAGIC, "id": id, "name": name, "port": port }).to_string();
         thread::spawn(move || {
             let mut last_announce = Instant::now() - Duration::from_secs(10);
+            let mut last_direct: HashMap<SocketAddr, Instant> = HashMap::new();
             let mut buf = [0u8; 2048];
             while run.load(Ordering::SeqCst) {
                 if last_announce.elapsed() >= Duration::from_secs(2) {
-                    let _ = udp.send_to(announce.as_bytes(), ("255.255.255.255", DISCOVERY_PORT));
+                    for dest in announce_targets(DISCOVERY_PORT) {
+                        let _ = udp.send_to(announce.as_bytes(), dest);
+                    }
                     last_announce = Instant::now();
                 }
                 let Ok((n, from)) = udp.recv_from(&mut buf) else { continue };
@@ -148,6 +179,14 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
                 let (Some(peer_id), Some(peer_name), Some(peer_port)) = (v["id"].as_str(), v["name"].as_str(), v["port"].as_u64()) else { continue };
                 let peer = Peer { id: peer_id.into(), name: peer_name.chars().take(60).collect(), host: from.ip().to_string(), port: peer_port as u16 };
                 peers.lock().unwrap().insert(peer.id.clone(), (peer, Instant::now()));
+                // Answer directly. A peer whose broadcast we heard can then see us even when its
+                // own broadcast was dropped (common on macOS Wi-Fi).
+                let due = last_direct.get(&from).is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
+                if due {
+                    let _ = udp.send_to(announce.as_bytes(), from);
+                    last_direct.insert(from, Instant::now());
+                    last_direct.retain(|_, seen| seen.elapsed() < Duration::from_secs(60));
+                }
             }
         });
     }
@@ -219,4 +258,19 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             Ok(())
         })
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn announce_includes_limited_broadcast_once() {
+        let targets = announce_targets(9);
+        assert!(targets.contains(&SocketAddr::from((Ipv4Addr::BROADCAST, 9))));
+        let mut sorted = targets.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(targets, sorted);
+    }
 }

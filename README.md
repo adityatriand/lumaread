@@ -5,7 +5,7 @@
 **A private, offline reading library for macOS and Android.**<br />
 Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and track your reading, all on your device.
 
-![Version](https://img.shields.io/badge/version-1.1.0-5b5bd6)
+![Version](https://img.shields.io/badge/version-1.1.1-5b5bd6)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%2013.3%2B%20%7C%20Android-1b1b2f)
 ![Offline](https://img.shields.io/badge/works-100%25%20offline-2ea44f)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white)
@@ -132,7 +132,10 @@ E2E tests stub `globalThis.isTauri` and Tauri's IPC to drive the UI in a browser
 
 ## Release
 
+Bump the version before building. Android rejects an update whose version is not higher. `pnpm version:bump` writes the same number into `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`. Tauri turns that into Android's versionCode (`major * 1000000 + minor * 1000 + patch`), so a patch bump is enough.
+
 ```sh
+pnpm version:bump                                              # 1.1.0 → 1.1.1 (or: pnpm version:bump minor | major)
 pnpm tauri build --target aarch64-apple-darwin --bundles dmg   # Apple Silicon
 pnpm tauri build --target x86_64-apple-darwin --bundles dmg    # Intel Macs (rustup target add x86_64-apple-darwin)
 pnpm tauri android build --apk --target aarch64                 # signed APK for 64-bit ARM phones (nearly all in use)
@@ -146,7 +149,7 @@ pnpm tauri android build --apk --target aarch64                 # signed APK for
 > [!WARNING]
 > Back up `~/.lumaread-release/`. Without that key, no update can ever be signed for installed Android apps.
 
-- **Version** lives in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`; Android's versionCode is derived from it.
+- **Version** is bumped with `pnpm version:bump` before a release. Android's versionCode is derived from it.
 - **Size:** Tauri compresses the web assets (~46 MB, mostly translation models) into the native binary, so each CPU architecture in a package carries its own copy. A universal APK (4 ABIs) is ~187 MB; one architecture per package is ~50 MB. Add `--target armv7` for old 32-bit phones; x86 / x86_64 are only emulators.
 
 ## Architecture

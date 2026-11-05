@@ -125,7 +125,7 @@ export function SyncPage({ onChanged }: { onChanged: () => void }) {
                   <Icon size={20} aria-hidden="true" />
                   <span className="sync-name">
                     <strong>{p.name}</strong>
-                    <span className="muted small">{at ? "Nearby" : "Not found — open Sync on it"}{p.lastSync ? ` · Last synced ${timeAgo(p.lastSync)}` : " · Never synced"}</span>
+                    <span className="muted small">{at ? "Nearby" : "Not visible yet — leave Sync open on it"}{p.lastSync ? ` · Last synced ${timeAgo(p.lastSync)}` : " · Never synced"}</span>
                   </span>
                   <button className="button primary" disabled={!at || !!busy} onClick={() => at && sync(p, at)}>
                     <RefreshCw size={16} className={busy === p.id ? "spin" : undefined} aria-hidden="true" /> Sync now
@@ -135,6 +135,9 @@ export function SyncPage({ onChanged }: { onChanged: () => void }) {
               );
             })}
           </ul>
+        )}
+        {paired.some((p) => !found.some((f) => f.id === p.id)) && (
+          <p className="muted small">Sync now turns on only while that device is visible. Same Wi-Fi and an existing pairing are not enough — leave the Sync page open there too. On a Mac, also allow LumaRead under System Settings → Privacy &amp; Security → Local Network.</p>
         )}
       </section>
 
