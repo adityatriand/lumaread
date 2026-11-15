@@ -163,7 +163,7 @@ async fn download_to(app: &AppHandle, url: &str, name: &str) -> Result<std::path
     let http = client()?;
     let mut url = url.to_string();
     for _ in 0..3 {
-        let resp = http.get(&url).send().await.map_err(|e| format!("Download failed: {e}"))?;
+        let mut resp = http.get(&url).send().await.map_err(|e| format!("Download failed: {e}"))?;
         let status = resp.status();
         if !status.is_success() {
             return Err(format!("Download failed ({status})"));
