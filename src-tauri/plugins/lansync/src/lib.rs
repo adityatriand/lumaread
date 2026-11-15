@@ -149,6 +149,31 @@ fn announce_targets(port: u16) -> (Vec<SocketAddr>, Vec<String>) {
     (targets, lines)
 }
 
+fn permission_hint(error: &io::Error) -> &'static str {
+    let denied = error.kind() == io::ErrorKind::PermissionDenied || error.raw_os_error() == Some(1);
+    if !denied {
+        ""
+    } else if cfg!(target_os = "android") {
+        " Android is refusing to send on this Wi-Fi."
+    } else if cfg!(target_os = "macos") {
+        " macOS is blocking Local Network for LumaRead."
+    } else {
+        ""
+    }
+}
+
+#[cfg(target_os = "android")]
+#[derive(Serialize)]
+struct BindWifi {
+    fd: i32,
+}
+
+/// Pin a socket to Wi-Fi. Android rejects LAN broadcast with EPERM when mobile data is the default network.
+#[cfg(target_os = "android")]
+fn bind_socket_to_wifi<R: Runtime>(app: &tauri::AppHandle<R>, fd: i32) -> Result<(), String> {
+    app.state::<Handle<R>>().0.run_mobile_plugin::<()>("bindWifi", BindWifi { fd }).map_err(|e| e.to_string())
+}
+
 // The discovery port can still be held by the previous session's thread for a moment after a restart.
 // Reuse lets a second copy on this Mac (the installed app and a dev build) hear the same broadcasts.
 fn bind_discovery(port: u16) -> io::Result<UdpSocket> {
@@ -196,6 +221,22 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
         note(&state.log, "Only the general broadcast is available. A device on Wi-Fi often never hears that.");
     }
 
+    #[cfg(target_os = "android")]
+    {
+        use std::os::fd::AsRawFd;
+        match app.state::<Handle<R>>().0.run_mobile_plugin::<()>("acquire", ()) {
+            Ok(()) => note(&state.log, "Holding the multicast lock so Wi-Fi keeps discovery packets"),
+            Err(e) => note(&state.log, format!("Could not hold the multicast lock: {e}")),
+        }
+        match bind_socket_to_wifi(&app, udp.as_raw_fd()) {
+            Ok(()) => note(&state.log, "Discovery is using the Wi-Fi network"),
+            Err(e) => note(&state.log, format!("Could not attach discovery to Wi-Fi: {e}")),
+        }
+        if let Err(e) = bind_socket_to_wifi(&app, listener.as_raw_fd()) {
+            note(&state.log, format!("Could not attach incoming sync to Wi-Fi: {e}"));
+        }
+    }
+
     {
         let (run, waiting, next) = (run.clone(), state.waiting.clone(), state.next.clone());
         thread::spawn(move || {
@@ -234,12 +275,7 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
                                 let msg = e.to_string();
                                 let repeat = announced_err.get(&dest).is_some_and(|(prev, at)| prev == &msg && at.elapsed() < Duration::from_secs(15));
                                 if !repeat {
-                                    let hint = if e.kind() == io::ErrorKind::PermissionDenied {
-                                        " macOS is blocking Local Network for LumaRead."
-                                    } else {
-                                        ""
-                                    };
-                                    note(&log, format!("Could not announce to {dest}: {msg}.{hint}"));
+                                    note(&log, format!("Could not announce to {dest}: {msg}.{}", permission_hint(&e)));
                                     announced_err.insert(dest, (msg, Instant::now()));
                                 }
                             }
@@ -290,11 +326,6 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
         });
     }
 
-    #[cfg(target_os = "android")]
-    match app.state::<Handle<R>>().0.run_mobile_plugin::<()>("acquire", ()) {
-        Ok(()) => note(&state.log, "Holding the Wi-Fi lock so announcements are not dropped"),
-        Err(e) => note(&state.log, format!("Could not hold the Wi-Fi lock: {e}")),
-    }
     #[cfg(not(target_os = "android"))]
     let _ = app;
     Ok(port)
@@ -323,13 +354,30 @@ fn peers(state: State<'_, Sync>) -> Vec<Peer> {
 }
 
 /// Sends one message to a peer and returns its reply (raw); runs off the main thread (a reply can be a whole book)
+fn connect_peer<R: Runtime>(app: &tauri::AppHandle<R>, host: &str, port: u16) -> io::Result<TcpStream> {
+    use socket2::{Domain, Socket, Type};
+    let socket = Socket::new(Domain::IPV4, Type::STREAM, None)?;
+    #[cfg(target_os = "android")]
+    {
+        use std::os::fd::AsRawFd;
+        let _ = bind_socket_to_wifi(app, socket.as_raw_fd());
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = app;
+    let addr = (host, port);
+    let std_addr = std::net::ToSocketAddrs::to_socket_addrs(&addr)?.next().ok_or(io::Error::from(io::ErrorKind::NotFound))?;
+    let sock_addr = socket2::SockAddr::from(std_addr);
+    socket.connect_timeout(&sock_addr, Duration::from_secs(5))?;
+    let stream: TcpStream = socket.into();
+    stream.set_read_timeout(Some(REPLY_TIMEOUT))?;
+    Ok(stream)
+}
+
 #[tauri::command]
-async fn send(host: String, port: u16, data: String) -> Result<Response, String> {
+async fn send<R: Runtime>(app: tauri::AppHandle<R>, host: String, port: u16, data: String) -> Result<Response, String> {
     let data = decode(&data)?;
     tauri::async_runtime::spawn_blocking(move || -> io::Result<Vec<u8>> {
-        let addr = (host.as_str(), port);
-        let mut s = TcpStream::connect_timeout(&std::net::ToSocketAddrs::to_socket_addrs(&addr)?.next().ok_or(io::ErrorKind::NotFound)?, Duration::from_secs(5))?;
-        s.set_read_timeout(Some(REPLY_TIMEOUT))?;
+        let mut s = connect_peer(&app, &host, port)?;
         write_frame(&mut s, &data)?;
         read_frame(&mut s)
     })
