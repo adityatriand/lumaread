@@ -9,6 +9,7 @@ Allows finding and syncing with LumaRead on other devices on the same Wi-Fi.
 - `allow-peers`
 - `allow-send`
 - `allow-respond`
+- `allow-log`
 
 ## Permission Table
 
@@ -18,6 +19,32 @@ Allows finding and syncing with LumaRead on other devices on the same Wi-Fi.
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`lansync:allow-log`
+
+</td>
+<td>
+
+Enables the log command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`lansync:deny-log`
+
+</td>
+<td>
+
+Denies the log command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

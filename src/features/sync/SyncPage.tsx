@@ -2,7 +2,7 @@ import { Laptop, RefreshCw, Smartphone, Wifi } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { forgetPeer, listPeers, type PeerDevice } from "../../lib/db";
 import { timeAgo } from "../../lib/format";
-import { deviceName, errorText, nearby, pairWith, setDeviceName, startSync, stopSync, syncWith, type Nearby, type PairRequest } from "./sync";
+import { deviceName, errorText, nearby, pairWith, setDeviceName, startSync, stopSync, syncLog, syncWith, type Nearby, type PairRequest } from "./sync";
 
 const POLL_MS = 2000;
 const deviceIcon = (name: string) => (/phone|android|tablet/i.test(name) ? Smartphone : Laptop);
@@ -13,6 +13,8 @@ export function SyncPage({ onChanged }: { onChanged: () => void }) {
   const [status, setStatus] = useState<"starting" | "ready" | "failed">("starting");
   const [error, setError] = useState<string>();
   const [found, setFound] = useState<Nearby[]>([]);
+  const [log, setLog] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
   const [paired, setPaired] = useState<PeerDevice[]>([]);
   const [pairing, setPairing] = useState<PairRequest & { incoming: boolean }>();
   const [busy, setBusy] = useState<string>(); // device id being paired or synced
@@ -33,7 +35,10 @@ export function SyncPage({ onChanged }: { onChanged: () => void }) {
       () => alive && setStatus("ready"),
       (e) => alive && (setStatus("failed"), setError(errorText(e))),
     );
-    const poll = setInterval(() => nearby().then((list) => alive && setFound(list), () => undefined), POLL_MS);
+    const poll = setInterval(() => {
+      nearby().then((list) => alive && setFound(list), () => undefined);
+      syncLog().then((lines) => alive && setLog(lines), () => undefined);
+    }, POLL_MS);
     return () => {
       alive = false;
       clearInterval(poll);
@@ -162,6 +167,19 @@ export function SyncPage({ onChanged }: { onChanged: () => void }) {
       </section>
 
       {(step || result) && <p className="sync-result" role="status">{step ?? result}</p>}
+
+      <section className="card">
+        <h2>Sync log</h2>
+        <p className="muted small">If a device never appears, copy this and send it. It lists where this device announces and anything it hears.</p>
+        <pre className="sync-log">{log.length ? log.join("\n") : "Waiting for Sync to start…"}</pre>
+        <button
+          className="button"
+          disabled={!log.length}
+          onClick={() => navigator.clipboard.writeText(log.join("\n")).then(() => setCopied(true), () => setCopied(false))}
+        >
+          {copied ? "Copied" : "Copy log"}
+        </button>
+      </section>
 
       {pairing && (
         <div className="backdrop">

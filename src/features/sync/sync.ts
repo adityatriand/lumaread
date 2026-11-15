@@ -199,6 +199,8 @@ export const errorText = (e: unknown) => (e instanceof Error ? e.message : Strin
 
 export const nearby = async () => (await invoke<Nearby[] | null>("plugin:lansync|peers")) ?? [];
 
+export const syncLog = async () => (await invoke<string[] | null>("plugin:lansync|log")) ?? [];
+
 // ---- Syncing with a paired device, both ways ----
 
 export async function syncWith(peer: PeerDevice, at: Target, onStep: (text: string) => void): Promise<SyncSummary> {

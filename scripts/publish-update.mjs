@@ -11,6 +11,10 @@ const REMOTE = "lumaread";
 const version = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
 const rclone = ["/opt/homebrew/bin/rclone", "/usr/local/bin/rclone"].find((file) => fs.existsSync(file)) ?? "rclone";
 
+function log(message) {
+  fs.writeSync(1, `${message}\n`);
+}
+
 function run(cmd, args, inherit = false) {
   try {
     return execFileSync(cmd, args, {
@@ -44,8 +48,14 @@ const found = wanted.flatMap(([pattern, name, key]) => {
 });
 if (!found.length) throw new Error("Nothing to publish. Build a DMG or APK into release/ first.");
 
+log(`Publishing ${version}: ${found.map(([, name]) => name).join(", ")}`);
 run(rclone, ["version"]);
-for (const [file, name] of found) run(rclone, ["copyto", file, `${REMOTE}:${name}`], true);
+for (const [file, name] of found) {
+  const mb = (fs.statSync(file).size / 1024 / 1024).toFixed(0);
+  log(`Uploading ${name} (${mb} MB)…`);
+  run(rclone, ["copyto", "--stats", "10s", "--stats-one-line", file, `${REMOTE}:${name}`], true);
+  log(`Uploaded ${name}`);
+}
 
 const listed = JSON.parse(run(rclone, ["lsjson", `${REMOTE}:`]));
 const idOf = (name) => {
@@ -55,6 +65,7 @@ const idOf = (name) => {
 };
 const manifest = path.join(os.tmpdir(), "lumaread-version.txt");
 fs.writeFileSync(manifest, [version, ...found.map(([, name, key]) => `${key}=${idOf(name)}`)].join("\n") + "\n");
+log("Uploading version.txt…");
 run(rclone, ["copyto", manifest, `${REMOTE}:version.txt`], true);
 fs.rmSync(manifest, { force: true });
-console.log(`Replaced Drive files with ${version}: ${found.map(([, name]) => name).join(", ")}`);
+log(`Replaced Drive files with ${version}: ${found.map(([, name]) => name).join(", ")}`);

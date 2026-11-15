@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the log command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-log",
+          "markdownDescription": "Enables the log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the log command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-log",
+          "markdownDescription": "Denies the log command without any pre-configured scope."
+        },
+        {
           "description": "Enables the peers command without any pre-configured scope.",
           "type": "string",
           "const": "allow-peers",
@@ -355,10 +367,10 @@
           "markdownDescription": "Denies the stop command without any pre-configured scope."
         },
         {
-          "description": "Allows finding and syncing with LumaRead on other devices on the same Wi-Fi.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-stop`\n- `allow-peers`\n- `allow-send`\n- `allow-respond`",
+          "description": "Allows finding and syncing with LumaRead on other devices on the same Wi-Fi.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-stop`\n- `allow-peers`\n- `allow-send`\n- `allow-respond`\n- `allow-log`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows finding and syncing with LumaRead on other devices on the same Wi-Fi.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-stop`\n- `allow-peers`\n- `allow-send`\n- `allow-respond`"
+          "markdownDescription": "Allows finding and syncing with LumaRead on other devices on the same Wi-Fi.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-stop`\n- `allow-peers`\n- `allow-send`\n- `allow-respond`\n- `allow-log`"
         }
       ]
     }

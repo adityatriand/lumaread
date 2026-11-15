@@ -41,6 +41,23 @@ struct Sync {
     peers: Arc<Mutex<HashMap<String, (Peer, Instant)>>>,
     waiting: Arc<Mutex<HashMap<u32, mpsc::Sender<Vec<u8>>>>>, // inbound requests awaiting the web app's reply
     next: Arc<AtomicU32>,
+    log: Arc<Mutex<Vec<String>>>,
+}
+
+fn clock() -> String {
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    let mut tm = unsafe { std::mem::zeroed::<libc::tm>() };
+    unsafe { libc::localtime_r(&secs, &mut tm) };
+    format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
+}
+
+fn note(log: &Mutex<Vec<String>>, message: impl AsRef<str>) {
+    let mut lines = log.lock().unwrap();
+    lines.push(format!("{}  {}", clock(), message.as_ref()));
+    let extra = lines.len().saturating_sub(80);
+    if extra > 0 {
+        lines.drain(0..extra);
+    }
 }
 
 fn read_frame(s: &mut TcpStream) -> io::Result<Vec<u8>> {
@@ -85,24 +102,51 @@ fn serve(mut s: TcpStream, waiting: Arc<Mutex<HashMap<u32, mpsc::Sender<Vec<u8>>
     write_frame(&mut s, &reply?)
 }
 
+/// Subnet broadcast from the address and mask when the OS does not report one.
+/// Android often leaves that field empty, so a phone would only shout at 255.255.255.255, which Wi-Fi drops.
+fn directed_broadcast(ip: Ipv4Addr, netmask: Ipv4Addr) -> Option<Ipv4Addr> {
+    let mask = u32::from(netmask);
+    if mask == 0 || mask == u32::MAX || ip.is_loopback() || ip.is_unspecified() {
+        return None;
+    }
+    let bcast = Ipv4Addr::from(u32::from(ip) | !mask);
+    if bcast.is_unspecified() || bcast.is_loopback() || bcast.is_broadcast() {
+        return None;
+    }
+    Some(bcast)
+}
+
 // Every IPv4 subnet this machine is on, plus the limited broadcast. macOS often sends
 // 255.255.255.255 out the wrong interface (a VPN or bridge), so peers on Wi-Fi never hear it
 // and a paired device stays "Not found" with Sync now disabled.
-fn announce_targets(port: u16) -> Vec<SocketAddr> {
+fn announce_targets(port: u16) -> (Vec<SocketAddr>, Vec<String>) {
     let mut targets = vec![SocketAddr::from((Ipv4Addr::BROADCAST, port))];
-    if let Ok(list) = if_addrs::get_if_addrs() {
-        for iface in list {
-            let if_addrs::IfAddr::V4(v4) = iface.addr else { continue };
-            let Some(bcast) = v4.broadcast else { continue };
-            if bcast.is_unspecified() || bcast.is_loopback() {
-                continue;
+    let mut lines = Vec::new();
+    match if_addrs::get_if_addrs() {
+        Ok(list) => {
+            for iface in list {
+                let if_addrs::IfAddr::V4(v4) = iface.addr else { continue };
+                if v4.ip.is_loopback() {
+                    continue;
+                }
+                let bcast = v4.broadcast.filter(|b| !b.is_unspecified() && !b.is_loopback()).or_else(|| directed_broadcast(v4.ip, v4.netmask));
+                match bcast {
+                    Some(bcast) => {
+                        lines.push(format!("{} {} announces to {bcast}", iface.name, v4.ip));
+                        targets.push(SocketAddr::from((bcast, port)));
+                    }
+                    None => lines.push(format!("{} {} has no broadcast address", iface.name, v4.ip)),
+                }
             }
-            targets.push(SocketAddr::from((bcast, port)));
         }
+        Err(e) => lines.push(format!("Could not list network interfaces: {e}")),
+    }
+    if lines.is_empty() {
+        lines.push("No network interface has an address. This device is not on Wi-Fi.".into());
     }
     targets.sort_unstable();
     targets.dedup();
-    targets
+    (targets, lines)
 }
 
 // The discovery port can still be held by the previous session's thread for a moment after a restart.
@@ -142,6 +186,15 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     listener.set_nonblocking(true).map_err(|e| e.to_string())?; // lets the loop notice a stop
     let udp = bind_discovery(DISCOVERY_PORT).map_err(|e| format!("Sync couldn't listen on this network: {e}"))?;
+    state.log.lock().unwrap().clear();
+    note(&state.log, format!("Listening for other devices, tcp {port}"));
+    let (targets, lines) = announce_targets(DISCOVERY_PORT);
+    for line in lines {
+        note(&state.log, line);
+    }
+    if targets.len() == 1 {
+        note(&state.log, "Only the general broadcast is available. A device on Wi-Fi often never hears that.");
+    }
 
     {
         let (run, waiting, next) = (run.clone(), state.waiting.clone(), state.next.clone());
@@ -158,32 +211,78 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
         });
     }
     {
-        let (run, peers) = (run.clone(), state.peers.clone());
+        let (run, peers, log) = (run.clone(), state.peers.clone(), state.log.clone());
         let announce = serde_json::json!({ "magic": MAGIC, "id": id, "name": name, "port": port }).to_string();
         thread::spawn(move || {
             let mut last_announce = Instant::now() - Duration::from_secs(10);
             let mut last_direct: HashMap<SocketAddr, Instant> = HashMap::new();
+            let mut announced_ok = std::collections::HashSet::new();
+            let mut announced_err: HashMap<SocketAddr, (String, Instant)> = HashMap::new();
+            let mut last_junk = Instant::now() - Duration::from_secs(30);
             let mut buf = [0u8; 2048];
             while run.load(Ordering::SeqCst) {
                 if last_announce.elapsed() >= Duration::from_secs(2) {
-                    for dest in announce_targets(DISCOVERY_PORT) {
-                        let _ = udp.send_to(announce.as_bytes(), dest);
+                    let (destinations, _) = announce_targets(DISCOVERY_PORT);
+                    for dest in destinations {
+                        match udp.send_to(announce.as_bytes(), dest) {
+                            Ok(_) => {
+                                if announced_ok.insert(dest) {
+                                    note(&log, format!("Announcing to {dest}"));
+                                }
+                            }
+                            Err(e) => {
+                                let msg = e.to_string();
+                                let repeat = announced_err.get(&dest).is_some_and(|(prev, at)| prev == &msg && at.elapsed() < Duration::from_secs(15));
+                                if !repeat {
+                                    let hint = if e.kind() == io::ErrorKind::PermissionDenied {
+                                        " macOS is blocking Local Network for LumaRead."
+                                    } else {
+                                        ""
+                                    };
+                                    note(&log, format!("Could not announce to {dest}: {msg}.{hint}"));
+                                    announced_err.insert(dest, (msg, Instant::now()));
+                                }
+                            }
+                        }
                     }
                     last_announce = Instant::now();
                 }
                 let Ok((n, from)) = udp.recv_from(&mut buf) else { continue };
-                let Ok(v) = serde_json::from_slice::<serde_json::Value>(&buf[..n]) else { continue };
-                if v["magic"] != MAGIC || v["id"] == id.as_str() {
+                let Ok(v) = serde_json::from_slice::<serde_json::Value>(&buf[..n]) else {
+                    if last_junk.elapsed() >= Duration::from_secs(15) {
+                        note(&log, format!("Ignored an unreadable packet from {from}"));
+                        last_junk = Instant::now();
+                    }
+                    continue;
+                };
+                if v["magic"] != MAGIC {
+                    if last_junk.elapsed() >= Duration::from_secs(15) {
+                        note(&log, format!("Ignored a packet from {from}: not LumaRead"));
+                        last_junk = Instant::now();
+                    }
                     continue;
                 }
-                let (Some(peer_id), Some(peer_name), Some(peer_port)) = (v["id"].as_str(), v["name"].as_str(), v["port"].as_u64()) else { continue };
+                if v["id"] == id.as_str() {
+                    continue;
+                }
+                let (Some(peer_id), Some(peer_name), Some(peer_port)) = (v["id"].as_str(), v["name"].as_str(), v["port"].as_u64()) else {
+                    note(&log, format!("Ignored a LumaRead packet from {from}: missing name or port"));
+                    continue;
+                };
                 let peer = Peer { id: peer_id.into(), name: peer_name.chars().take(60).collect(), host: from.ip().to_string(), port: peer_port as u16 };
+                let fresh = !peers.lock().unwrap().contains_key(&peer.id);
+                if fresh {
+                    note(&log, format!("Found {} at {}", peer.name, peer.host));
+                }
                 peers.lock().unwrap().insert(peer.id.clone(), (peer, Instant::now()));
                 // Answer directly. A peer whose broadcast we heard can then see us even when its
                 // own broadcast was dropped (common on macOS Wi-Fi).
                 let due = last_direct.get(&from).is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
                 if due {
-                    let _ = udp.send_to(announce.as_bytes(), from);
+                    match udp.send_to(announce.as_bytes(), from) {
+                        Ok(_) => {}
+                        Err(e) => note(&log, format!("Could not reply to {from}: {e}")),
+                    }
                     last_direct.insert(from, Instant::now());
                     last_direct.retain(|_, seen| seen.elapsed() < Duration::from_secs(60));
                 }
@@ -192,7 +291,10 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
     }
 
     #[cfg(target_os = "android")]
-    let _ = app.state::<Handle<R>>().0.run_mobile_plugin::<()>("acquire", ());
+    match app.state::<Handle<R>>().0.run_mobile_plugin::<()>("acquire", ()) {
+        Ok(()) => note(&state.log, "Holding the Wi-Fi lock so announcements are not dropped"),
+        Err(e) => note(&state.log, format!("Could not hold the Wi-Fi lock: {e}")),
+    }
     #[cfg(not(target_os = "android"))]
     let _ = app;
     Ok(port)
@@ -206,6 +308,11 @@ fn stop<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>) {
     let _ = app.state::<Handle<R>>().0.run_mobile_plugin::<()>("release", ());
     #[cfg(not(target_os = "android"))]
     let _ = app;
+}
+
+#[tauri::command]
+fn log(state: State<'_, Sync>) -> Vec<String> {
+    state.log.lock().unwrap().clone()
 }
 
 #[tauri::command]
@@ -247,7 +354,7 @@ struct Handle<R: Runtime>(tauri::plugin::PluginHandle<R>);
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("lansync")
-        .invoke_handler(tauri::generate_handler![start, stop, peers, send, respond])
+        .invoke_handler(tauri::generate_handler![start, stop, peers, send, respond, log])
         .setup(|app, _api| {
             app.manage(Sync::default());
             #[cfg(target_os = "android")]
@@ -266,11 +373,19 @@ mod tests {
 
     #[test]
     fn announce_includes_limited_broadcast_once() {
-        let targets = announce_targets(9);
+        let (targets, _) = announce_targets(9);
         assert!(targets.contains(&SocketAddr::from((Ipv4Addr::BROADCAST, 9))));
         let mut sorted = targets.clone();
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(targets, sorted);
+    }
+
+    #[test]
+    fn subnet_broadcast_is_derived_from_the_mask() {
+        assert_eq!(directed_broadcast(Ipv4Addr::new(192, 168, 1, 20), Ipv4Addr::new(255, 255, 255, 0)), Some(Ipv4Addr::new(192, 168, 1, 255)));
+        assert_eq!(directed_broadcast(Ipv4Addr::new(10, 1, 2, 3), Ipv4Addr::new(255, 255, 0, 0)), Some(Ipv4Addr::new(10, 1, 255, 255)));
+        assert_eq!(directed_broadcast(Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(255, 255, 255, 255)), None);
+        assert_eq!(directed_broadcast(Ipv4Addr::new(127, 0, 0, 1), Ipv4Addr::new(255, 0, 0, 0)), None);
     }
 }
