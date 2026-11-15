@@ -5,7 +5,7 @@
 **A private, offline reading library for macOS and Android.**<br />
 Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and track your reading, all on your device.
 
-![Version](https://img.shields.io/badge/version-1.1.7-5b5bd6)
+![Version](https://img.shields.io/badge/version-1.1.8-5b5bd6)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%2013.3%2B%20%7C%20Android-1b1b2f)
 ![Offline](https://img.shields.io/badge/works-100%25%20offline-2ea44f)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white)

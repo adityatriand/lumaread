@@ -154,7 +154,7 @@ fn permission_hint(error: &io::Error) -> &'static str {
     if !denied {
         ""
     } else if cfg!(target_os = "android") {
-        " Android is refusing to send on this Wi-Fi."
+        " Android blocked local network access. Allow Nearby devices for LumaRead."
     } else if cfg!(target_os = "macos") {
         " macOS is blocking Local Network for LumaRead."
     } else {
@@ -198,7 +198,11 @@ fn bind_discovery(port: u16) -> io::Result<UdpSocket> {
 }
 
 #[tauri::command]
-fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: String, name: String, on_request: Channel) -> Result<u16, String> {
+async fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: String, name: String, on_request: Channel) -> Result<u16, String> {
+    // Android 17 returns EPERM for every LAN packet until this is allowed. Ask before opening sockets,
+    // and from this async command so the system dialog is not waiting on the UI thread.
+    #[cfg(target_os = "android")]
+    app.state::<Handle<R>>().0.run_mobile_plugin::<()>("ensureLocalNetwork", ()).map_err(|e| e.to_string())?;
     let run = Arc::new(AtomicBool::new(true));
     {
         let mut current = state.running.lock().unwrap();
@@ -224,6 +228,7 @@ fn start<R: Runtime>(app: tauri::AppHandle<R>, state: State<'_, Sync>, id: Strin
     #[cfg(target_os = "android")]
     {
         use std::os::fd::AsRawFd;
+        note(&state.log, "Local network access is allowed");
         match app.state::<Handle<R>>().0.run_mobile_plugin::<()>("acquire", ()) {
             Ok(()) => note(&state.log, "Holding the multicast lock so Wi-Fi keeps discovery packets"),
             Err(e) => note(&state.log, format!("Could not hold the multicast lock: {e}")),

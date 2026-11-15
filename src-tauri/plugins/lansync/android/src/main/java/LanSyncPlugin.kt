@@ -2,12 +2,16 @@ package com.lumaread.lansync
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
+import app.tauri.annotation.Permission
+import app.tauri.annotation.PermissionCallback
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.Plugin
@@ -17,13 +21,38 @@ class BindWifiArgs {
     var fd: Int = -1
 }
 
+private const val LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+
 // Holds a multicast lock while the Sync page is open, so discovery broadcasts from other devices arrive.
 // Also pins a socket to Wi-Fi: Android returns EPERM for LAN broadcast when mobile data is the default network.
-@TauriPlugin
+@TauriPlugin(
+    permissions = [
+        Permission(strings = [LOCAL_NETWORK], alias = "localNetwork"),
+    ]
+)
 class LanSyncPlugin(private val activity: Activity) : Plugin(activity) {
     private val lock: WifiManager.MulticastLock by lazy {
         (activity.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
             .createMulticastLock("lumaread-sync").apply { setReferenceCounted(false) }
+    }
+
+    @Command
+    fun ensureLocalNetwork(invoke: Invoke) {
+        // Older Android grants this with INTERNET. Android 17 (One UI 9) blocks LAN traffic until the user allows it.
+        if (Build.VERSION.SDK_INT < 37 || activity.checkSelfPermission(LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED) {
+            invoke.resolve()
+            return
+        }
+        requestPermissionForAlias("localNetwork", invoke, "localNetworkResult")
+    }
+
+    @PermissionCallback
+    fun localNetworkResult(invoke: Invoke) {
+        if (activity.checkSelfPermission(LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED) {
+            invoke.resolve()
+        } else {
+            invoke.reject("Allow Nearby devices for LumaRead, then open Sync again.")
+        }
     }
 
     @Command

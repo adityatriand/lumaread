@@ -142,7 +142,7 @@ export function SyncPage({ onChanged }: { onChanged: () => void }) {
           </ul>
         )}
         {paired.some((p) => !found.some((f) => f.id === p.id)) && (
-          <p className="muted small">Sync now turns on only while that device is visible. Same Wi-Fi and an existing pairing are not enough — leave the Sync page open there too. On a Mac, also allow LumaRead under System Settings → Privacy &amp; Security → Local Network.</p>
+          <p className="muted small">Sync now turns on only while that device is visible. Same Wi-Fi and an existing pairing are not enough — leave the Sync page open there too. On a Mac, also allow LumaRead under System Settings → Privacy &amp; Security → Local Network. On Android 17, allow Nearby devices for LumaRead.</p>
         )}
       </section>
 

@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Wi-Fi drivers drop broadcast packets in power save unless a multicast lock is held (only while Sync is open) -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Android 17 blocks LAN broadcast until the user allows this. It is in the Nearby devices group. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- Needed to find the Wi-Fi network and send discovery on it when mobile data is the default -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 </manifest>
