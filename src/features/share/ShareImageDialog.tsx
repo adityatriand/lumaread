@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Copy, Download, Share2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { saveBinaryFile } from "../../lib/saveFile";
-import type { ChartStyle } from "../stats/achievementCard";
+import type { ChartStyle, Ink } from "../stats/achievementCard";
 import { CARD_THEMES, toPngBlob, type CardFormat, type CardTheme } from "./quoteCard";
 
 interface Props {
@@ -11,7 +11,8 @@ interface Props {
   caption: string; // sent as text alongside the image where the target app accepts it
   fileBase: string;
   chart?: boolean; // offer Bar / Line for cards that draw a chart (story format only)
-  render: (format: CardFormat, theme: CardTheme, chart: ChartStyle) => Promise<HTMLCanvasElement>;
+  variants?: { id: string; label: string }[]; // transparent stat stickers; replaces the themed card
+  render: (format: CardFormat, theme: CardTheme, chart: ChartStyle, sticker?: { variant: string; ink: Ink }) => Promise<HTMLCanvasElement>;
   onClose: () => void;
 }
 
@@ -25,17 +26,21 @@ async function base64(blob: Blob) {
   return btoa(binary);
 }
 
-export function ShareImageDialog({ heading, alt, caption, fileBase, chart, render, onClose }: Props) {
+export function ShareImageDialog({ heading, alt, caption, fileBase, chart, variants, render, onClose }: Props) {
   const [format, setFormat] = useState<CardFormat>("story");
   const [theme, setTheme] = useState<CardTheme>("luma");
   const [chartStyle, setChartStyle] = useState<ChartStyle>("bar");
+  const [variant, setVariant] = useState(variants?.[0]?.id ?? "summary");
+  const [ink, setInk] = useState<Ink>("white");
   const [card, setCard] = useState<{ url: string; blob: Blob }>();
   const [status, setStatus] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const sticker = !!variants?.length;
 
   useEffect(() => {
     let current = true;
-    render(format, theme, chartStyle)
+    const choice = sticker ? { variant, ink } : undefined;
+    render(format, theme, chartStyle, choice)
       .then(toPngBlob)
       .then((blob) => current && setCard({ url: URL.createObjectURL(blob), blob }))
       .catch(() => current && setStatus("Could not create the image."));
@@ -43,12 +48,12 @@ export function ShareImageDialog({ heading, alt, caption, fileBase, chart, rende
       current = false;
     };
     // render is recreated by callers each render; the card only depends on these choices here
-  }, [format, theme, chartStyle]);
+  }, [format, theme, chartStyle, variant, ink, sticker]);
 
   // Free each preview's object URL once it is replaced or the dialog closes
   useEffect(() => () => card && URL.revokeObjectURL(card.url), [card]);
 
-  const fileName = `${fileBase}-${format}.png`;
+  const fileName = sticker ? `${fileBase}-${variant}.png` : `${fileBase}-${format}.png`;
 
   async function run(action: () => Promise<string | undefined>) {
     setBusy(true);
@@ -82,40 +87,59 @@ export function ShareImageDialog({ heading, alt, caption, fileBase, chart, rende
           <button className="icon-button" aria-label="Close" onClick={onClose}><X size={20} /></button>
         </header>
 
-        <div className={`card-preview ${format}`}>
+        <div className={`card-preview ${sticker ? "sticker" : format}`}>
           {card ? <img src={card.url} alt={alt} /> : <span className="muted">Creating image…</span>}
         </div>
 
         <div className="share-options">
-          <div className="segmented" role="radiogroup" aria-label="Format">
-            {(["story", "square"] as const).map((f) => (
-              <button key={f} role="radio" aria-checked={format === f} aria-pressed={format === f} onClick={() => setFormat(f)}>
-                {f === "story" ? "Story 9:16" : "Square"}
-              </button>
-            ))}
-          </div>
-          {chart && format === "story" && (
-            <div className="segmented" role="radiogroup" aria-label="Chart">
-              {(["bar", "line"] as const).map((c) => (
-                <button key={c} role="radio" aria-checked={chartStyle === c} aria-pressed={chartStyle === c} onClick={() => setChartStyle(c)}>
-                  {c === "bar" ? "Bar" : "Line"}
-                </button>
-              ))}
-            </div>
+          {sticker ? (
+            <>
+              <div className="segmented wrap" role="radiogroup" aria-label="Stat">
+                {variants.map((v) => (
+                  <button key={v.id} role="radio" aria-checked={variant === v.id} aria-pressed={variant === v.id} onClick={() => setVariant(v.id)}>{v.label}</button>
+                ))}
+              </div>
+              <div className="segmented" role="radiogroup" aria-label="Ink">
+                {(["white", "black"] as const).map((name) => (
+                  <button key={name} role="radio" aria-checked={ink === name} aria-pressed={ink === name} onClick={() => setInk(name)}>
+                    {name === "white" ? "White" : "Black"}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="segmented" role="radiogroup" aria-label="Format">
+                {(["story", "square"] as const).map((f) => (
+                  <button key={f} role="radio" aria-checked={format === f} aria-pressed={format === f} onClick={() => setFormat(f)}>
+                    {f === "story" ? "Story 9:16" : "Square"}
+                  </button>
+                ))}
+              </div>
+              {chart && format === "story" && (
+                <div className="segmented" role="radiogroup" aria-label="Chart">
+                  {(["bar", "line"] as const).map((c) => (
+                    <button key={c} role="radio" aria-checked={chartStyle === c} aria-pressed={chartStyle === c} onClick={() => setChartStyle(c)}>
+                      {c === "bar" ? "Bar" : "Line"}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="color-row" role="radiogroup" aria-label="Style">
+                {(Object.keys(CARD_THEMES) as CardTheme[]).map((t) => (
+                  <button
+                    key={t}
+                    role="radio"
+                    aria-checked={theme === t}
+                    aria-label={CARD_THEMES[t].label}
+                    className="swatch-button"
+                    style={{ background: `linear-gradient(135deg, ${CARD_THEMES[t].bg[0]}, ${CARD_THEMES[t].bg[1]})` }}
+                    onClick={() => setTheme(t)}
+                  />
+                ))}
+              </div>
+            </>
           )}
-          <div className="color-row" role="radiogroup" aria-label="Style">
-            {(Object.keys(CARD_THEMES) as CardTheme[]).map((t) => (
-              <button
-                key={t}
-                role="radio"
-                aria-checked={theme === t}
-                aria-label={CARD_THEMES[t].label}
-                className="swatch-button"
-                style={{ background: `linear-gradient(135deg, ${CARD_THEMES[t].bg[0]}, ${CARD_THEMES[t].bg[1]})` }}
-                onClick={() => setTheme(t)}
-              />
-            ))}
-          </div>
         </div>
 
         <div className="share-actions">

@@ -391,6 +391,23 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .card-preview { display: grid; place-items: center; background: var(--surface-2); border-radius: 12px; padding: 12px; }
 .card-preview img { display: block; max-width: 100%; max-height: 52vh; border-radius: 10px; box-shadow: 0 6px 20px rgb(20 20 50 / 0.18); }
 .card-preview.story { min-height: 300px; }
+.card-preview.sticker {
+  background-color: #8d8d98;
+  background-image:
+    linear-gradient(45deg, #bdbdc7 25%, transparent 25%),
+    linear-gradient(-45deg, #bdbdc7 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #bdbdc7 75%),
+    linear-gradient(-45deg, transparent 75%, #bdbdc7 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+}
+.card-preview.sticker img { box-shadow: none; border-radius: 0; max-height: 42vh; }
+.segmented.wrap { flex-wrap: wrap; width: 100%; }
+.date-filter { min-width: 180px; }
+.update-row { display: grid; gap: 8px; justify-items: start; margin-bottom: 8px; }
+.session-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.session-list li { display: flex; gap: 12px; align-items: baseline; }
+.session-list li span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share-options { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .share-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .note-actions { display: flex; gap: 12px; margin-top: 10px; }

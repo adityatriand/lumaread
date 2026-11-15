@@ -17,6 +17,23 @@ export function lastDays(n: number, now = Date.now()): string[] {
   return Array.from({ length: n }, (_, i) => dayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (n - 1 - i), 12).getTime()));
 }
 
+// Inclusive local days from `from` through `to`. Out-of-order ends are swapped.
+export function daysBetween(from: string, to: string): string[] {
+  let start = from;
+  let end = to;
+  if (start > end) [start, end] = [end, start];
+  const [y, m, d] = start.split("-").map(Number);
+  const cursor = new Date(y, m - 1, d, 12);
+  const days: string[] = [];
+  for (let i = 0; i < 4000; i++) {
+    const key = dayKey(cursor.getTime());
+    days.push(key);
+    if (key >= end) break;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
+}
+
 export interface DayStat { day: string; ms: number; pages: number }
 
 export function byDay(sessions: Session[], days: string[]): DayStat[] {

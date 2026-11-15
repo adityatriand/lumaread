@@ -51,18 +51,24 @@ test("reading time, pages and streak are tracked and shown per book and overall"
 
   await page.getByRole("button", { name: "Stats" }).first().click();
   const tiles = page.locator(".stat-tiles");
-  await expect(page.locator(".hero-figure")).toHaveText(/^3[0-9]m$/); // 20m seeded + ~13m today
-  await expect(tiles).toContainText("Pages read6");
+  // The page shows one date, today: the live session only. Seeded days stay off this date.
+  await expect(page.locator(".hero-figure")).toHaveText(/^(?:<1m|[0-9]+m)$/);
+  await expect(tiles).toContainText("Pages read2");
   await expect(tiles).toContainText("Current streak3 days");
-  await expect(tiles).toContainText("Days read3 / 7");
-  await expect(page.locator(".chart .bar")).toHaveCount(3);
-  await expect(page.locator(".bar-list li")).toHaveCount(1);
+  await expect(tiles).toContainText("Sessions1");
+  await expect(page.locator(".session-list li")).toHaveCount(1);
 
-  // Hover a column for its tooltip, then check the table view carries the same numbers
-  await page.locator(".chart .col").last().hover();
-  await expect(page.locator(".chart-tip")).toContainText("pages");
-  await page.getByRole("button", { name: "Table" }).click();
-  await expect(page.locator(".data-table").first().locator("tbody tr")).toHaveCount(3);
+  await page.getByLabel("From").fill("2026-10-19");
+  await page.getByLabel("To").fill("2026-10-19");
+  await expect(page.locator(".hero-figure")).toHaveText("10m");
+  await expect(tiles).toContainText("Pages read2");
+  await expect(page.locator(".session-list li")).toHaveCount(1);
+
+  await page.getByRole("radio", { name: "Week" }).click();
+  await expect(tiles).toContainText("Pages read6");
+  await expect(tiles).toContainText("Sessions3");
+  await page.getByRole("radio", { name: "Today" }).click();
+  await expect(page.locator(".session-list li")).toHaveCount(1);
 
   // Per book
   await choose(page, "Book", "Smoke PDF");
@@ -73,17 +79,15 @@ test("reading time, pages and streak are tracked and shown per book and overall"
   // Achievement card
   await page.getByRole("button", { name: "Share achievement" }).click();
   const dialog = page.getByRole("dialog", { name: "Share achievement" });
-  const size = () => dialog.locator("img").evaluate((img: HTMLImageElement) => img.decode().then(() => [img.naturalWidth, img.naturalHeight], () => null));
-  await expect.poll(size).toEqual([1080, 1920]);
-  // The story card's chart comes as bars or a line; square cards have no chart, so no choice
-  await expect(dialog.getByRole("radio", { name: "Bar" })).toHaveAttribute("aria-checked", "true");
-  await dialog.getByRole("radio", { name: "Line" }).click();
-  await expect(dialog.getByRole("radio", { name: "Line" })).toHaveAttribute("aria-checked", "true");
-  await expect.poll(size).toEqual([1080, 1920]);
-  await dialog.getByRole("radio", { name: "Square" }).click();
-  await expect(dialog.getByRole("radiogroup", { name: "Chart" })).toHaveCount(0);
-  await expect.poll(size).toEqual([1080, 1080]);
-  await dialog.getByRole("radio", { name: "Story 9:16" }).click();
+  const size = () => dialog.locator("img").evaluate((img: HTMLImageElement) => img.decode().then(() => [img.naturalWidth, img.naturalHeight] as const, () => null));
+  await expect.poll(async () => {
+    const box = await size();
+    return !!box && box[0] === 1080 && box[1] > 200 && box[1] < 1600;
+  }).toBe(true);
+  await expect(dialog.getByRole("radio", { name: "Summary" })).toHaveAttribute("aria-checked", "true");
+  await dialog.getByRole("radio", { name: "Time" }).click();
+  await expect(dialog.getByRole("radio", { name: "Time" })).toHaveAttribute("aria-checked", "true");
+  await dialog.getByRole("radio", { name: "Black" }).click();
   await dialog.getByRole("button", { name: "Save image" }).click();
-  await expect.poll(async () => (await invokedCalls(page)).find((c) => c.cmd === "plugin:dialog|save")?.args).toMatchObject({ options: { defaultPath: "lumaread-achievement-story.png" } });
+  await expect.poll(async () => (await invokedCalls(page)).find((c) => c.cmd === "plugin:dialog|save")?.args).toMatchObject({ options: { defaultPath: "lumaread-achievement-time.png" } });
 });

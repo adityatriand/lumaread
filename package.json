@@ -1,7 +1,7 @@
 {
   "name": "lumaread",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "setup:data": "node scripts/build-dictionaries.mjs && node scripts/fetch-translation-models.mjs",
     "setup:summarize": "node scripts/fetch-summarization-model.mjs",
-    "version:bump": "node scripts/bump-version.mjs"
+    "version:bump": "node scripts/bump-version.mjs",
+    "publish:update": "node scripts/publish-update.mjs"
   },
   "dependencies": {
     "@browsermt/bergamot-translator": "0.4.9",

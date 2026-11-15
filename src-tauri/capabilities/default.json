@@ -7,6 +7,9 @@
   ],
   "permissions": [
     "core:default",
+    "core:app:allow-version",
+    "allow-check-update",
+    "allow-install-update",
     "core:window:allow-start-dragging",
     "dialog:allow-save",
     "fs:allow-write-text-file",

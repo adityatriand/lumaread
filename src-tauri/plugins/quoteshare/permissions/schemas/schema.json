@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the install_apk command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-install-apk",
+          "markdownDescription": "Enables the install_apk command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the install_apk command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-install-apk",
+          "markdownDescription": "Denies the install_apk command without any pre-configured scope."
+        },
+        {
           "description": "Enables the share_image command without any pre-configured scope.",
           "type": "string",
           "const": "allow-share-image",
@@ -307,10 +319,10 @@
           "markdownDescription": "Denies the share_image command without any pre-configured scope."
         },
         {
-          "description": "Allows sharing a quote card image through the system share sheet.\n#### This default permission set includes:\n\n- `allow-share-image`",
+          "description": "Allows sharing a quote card image through the system share sheet.\n#### This default permission set includes:\n\n- `allow-share-image`\n- `allow-install-apk`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows sharing a quote card image through the system share sheet.\n#### This default permission set includes:\n\n- `allow-share-image`"
+          "markdownDescription": "Allows sharing a quote card image through the system share sheet.\n#### This default permission set includes:\n\n- `allow-share-image`\n- `allow-install-apk`"
         }
       ]
     }

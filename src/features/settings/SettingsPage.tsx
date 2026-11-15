@@ -1,3 +1,5 @@
+import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 import { BookOpen, Info, Languages, Palette, ScanText, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatSize } from "../../lib/format";
@@ -83,6 +85,7 @@ export function SettingsPage({ prefs, onChange }: Props) {
           {section === "about" && (
             <>
               <h2>About &amp; licences</h2>
+              <Updates />
               <dl className="credits">
                 {CREDITS.map(([what, who, licence]) => (
                   <div key={what}>
@@ -95,6 +98,46 @@ export function SettingsPage({ prefs, onChange }: Props) {
           )}
         </section>
       </div>
+    </div>
+  );
+}
+
+interface UpdateStatus { current: string; latest?: string; available: boolean; url?: string; message: string }
+
+function Updates() {
+  const [version, setVersion] = useState<string>();
+  const [status, setStatus] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getVersion().then(setVersion, () => undefined);
+  }, []);
+
+  async function check() {
+    setBusy(true);
+    setStatus("Checking for updates…");
+    try {
+      const info = await invoke<UpdateStatus>("check_update");
+      if (!info.available || !info.url) {
+        setStatus(info.message);
+        return;
+      }
+      setStatus(`Downloading ${info.latest ?? "the update"}…`);
+      if (/Android/i.test(navigator.userAgent)) await invoke("plugin:quoteshare|install_apk", { url: info.url });
+      else await invoke("install_update", { url: info.url });
+      setStatus(/Android/i.test(navigator.userAgent) ? "Allow the install on the next screen." : "Update installed. LumaRead is opening again.");
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="update-row">
+      <p className="muted">{version ? `Version ${version}` : "LumaRead"}</p>
+      <button className="button" disabled={busy} onClick={check}>Check for updates</button>
+      {status && <p className="muted small" role="status">{status}</p>}
     </div>
   );
 }

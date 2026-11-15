@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-check-update"
+description = "Enables checking the published build."
+commands.allow = ["check_update"]
+
+[[permission]]
+identifier = "allow-install-update"
+description = "Enables installing the published build."
+commands.allow = ["install_update"]

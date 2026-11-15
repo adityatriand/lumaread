@@ -1,6 +1,6 @@
 [package]
 name = "lumaread"
-version = "1.1.1"
+version = "1.1.2"
 description = "LumaRead — personal reading library"
 authors = ["Aditya Ananda"]
 edition = "2024"
@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-quoteshare = { path = "plugins/quoteshare" }

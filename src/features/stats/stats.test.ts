@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Session } from "../../lib/db";
-import { byDay, dayKey, estimateRemainingMs, formatClock, formatDuration, lastDays, streaks, summarize, timeByBook } from "./stats";
+import { byDay, dayKey, daysBetween, estimateRemainingMs, formatClock, formatDuration, lastDays, streaks, summarize, timeByBook } from "./stats";
 
 const NOW = new Date(2026, 9, 20, 15).getTime(); // 20 Oct 2026, 15:00 local
 const at = (daysAgo: number) => new Date(2026, 9, 20 - daysAgo, 10).getTime();
@@ -29,6 +29,14 @@ describe("lastDays / byDay", () => {
       { day: "2026-10-19", ms: 0, pages: 0 },
       { day: "2026-10-20", ms: 15 * 60_000, pages: 15 },
     ]);
+  });
+});
+
+describe("daysBetween", () => {
+  it("lists every day in a range, including a single day and a swapped pair", () => {
+    expect(daysBetween("2026-10-18", "2026-10-20")).toEqual(["2026-10-18", "2026-10-19", "2026-10-20"]);
+    expect(daysBetween("2026-10-20", "2026-10-20")).toEqual(["2026-10-20"]);
+    expect(daysBetween("2026-11-01", "2026-10-30")).toEqual(["2026-10-30", "2026-10-31", "2026-11-01"]);
   });
 });
 
@@ -88,8 +96,8 @@ describe("achievement card helpers", () => {
     expect(weeks).toHaveLength(13);
     expect(weeks.at(-1)).toBe(84 + 85 + 86 + 87 + 88 + 89 + 90);
     expect(weeks[0]).toBe(1 + 2 + 3 + 4 + 5 + 6);
-    expect(achievementCaption({ period: "Last 7 days", ms: 125 * 60_000, pages: 140, streak: 4, daysRead: 5, daily: [], days: [] })).toBe(
-      "2h 05m of reading and 140 pages in the last 7 days and a 4-day streak. #LumaRead",
+    expect(achievementCaption({ period: "20 October 2026", ms: 125 * 60_000, pages: 140, streak: 4, daysRead: 1, daily: [], days: [] })).toBe(
+      "2h 05m of reading and 140 pages on 20 October 2026 · 4-day streak. #LumaRead",
     );
   });
 });

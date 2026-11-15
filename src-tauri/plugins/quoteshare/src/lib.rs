@@ -20,6 +20,30 @@ pub struct ShareImage {
 #[cfg(target_os = "android")]
 struct Handle<R: Runtime>(tauri::plugin::PluginHandle<R>);
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallApk {
+    pub url: String,
+}
+
+#[tauri::command]
+fn install_apk<R: Runtime>(app: tauri::AppHandle<R>, url: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager;
+        return app
+            .state::<Handle<R>>()
+            .0
+            .run_mobile_plugin::<()>("installApk", InstallApk { url })
+            .map_err(|e| e.to_string());
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, url);
+        Err("Updates install from the disk image on this device".into())
+    }
+}
+
 #[tauri::command]
 fn share_image<R: Runtime>(app: tauri::AppHandle<R>, payload: ShareImage) -> Result<(), String> {
     #[cfg(target_os = "android")]
@@ -40,7 +64,7 @@ fn share_image<R: Runtime>(app: tauri::AppHandle<R>, payload: ShareImage) -> Res
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("quoteshare")
-        .invoke_handler(tauri::generate_handler![share_image])
+        .invoke_handler(tauri::generate_handler![share_image, install_apk])
         .setup(|_app, _api| {
             #[cfg(target_os = "android")]
             {
