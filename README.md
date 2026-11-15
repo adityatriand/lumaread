@@ -5,7 +5,7 @@
 **A private, offline reading library for macOS and Android.**<br />
 Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and track your reading, all on your device.
 
-![Version](https://img.shields.io/badge/version-1.1.4-5b5bd6)
+![Version](https://img.shields.io/badge/version-1.1.5-5b5bd6)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%2013.3%2B%20%7C%20Android-1b1b2f)
 ![Offline](https://img.shields.io/badge/works-100%25%20offline-2ea44f)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white)
@@ -150,7 +150,7 @@ pnpm tauri android build --apk --target aarch64                 # signed APK for
 > Back up `~/.lumaread-release/`. Without that key, no update can ever be signed for installed Android apps.
 
 - **Version** is bumped with `pnpm version:bump` before a release. Android's versionCode is derived from it.
-- **Updates:** Build locally, then `pnpm publish:update`. That pushes the DMG and APK to the `updates` branch and replaces the previous build, so `master` never stores installers and old builds are not kept. Settings → About → Check for updates downloads that build and installs it. On macOS it runs `xattr -cr` after install. These files are larger than GitHub's 100 MB limit, so the push uses Git LFS (`brew install git-lfs`).
+- **Updates:** Build locally, then `pnpm publish:update`. That overwrites the DMG, APK, and `version.txt` in the shared Google Drive folder, so the folder stays one build in size and nothing is stored in the git repo. Settings → About → Check for updates downloads that build and installs it. On macOS it runs `xattr -cr` after install. The upload uses rclone (`brew install rclone`), signed in once on this Mac to the Drive folder.
 - **Size:** Tauri compresses the web assets (~46 MB, mostly translation models) into the native binary, so each CPU architecture in a package carries its own copy. A universal APK (4 ABIs) is ~187 MB; one architecture per package is ~50 MB. Add `--target armv7` for old 32-bit phones; x86 / x86_64 are only emulators.
 
 ## Architecture

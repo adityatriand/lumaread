@@ -12,5 +12,8 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/quoteshare_paths" />
         </provider>
+        <receiver
+            android:name="com.lumaread.quoteshare.UpdateInstallReceiver"
+            android:exported="false" />
     </application>
 </manifest>

@@ -415,6 +415,9 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .date-grid button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 700; }
 .date-grid button:disabled { opacity: 0.28; cursor: default; }
 .update-row { display: grid; gap: 8px; justify-items: start; margin-bottom: 8px; }
+.update-progress { width: min(280px, 100%); height: 8px; }
+.update-progress > span.indeterminate { width: 40%; animation: update-slide 1.1s ease-in-out infinite; }
+@keyframes update-slide { from { transform: translateX(-120%); } to { transform: translateX(280%); } }
 .session-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .session-list li { display: flex; gap: 12px; align-items: baseline; }
 .session-list li span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

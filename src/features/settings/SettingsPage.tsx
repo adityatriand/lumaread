@@ -1,5 +1,6 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { BookOpen, Info, Languages, Palette, ScanText, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatSize } from "../../lib/format";
@@ -103,11 +104,14 @@ export function SettingsPage({ prefs, onChange }: Props) {
 }
 
 interface UpdateStatus { current: string; latest?: string; available: boolean; url?: string; message: string }
+interface UpdateProgress { received: number; total?: number; phase: "download" | "install" }
 
 function Updates() {
   const [version, setVersion] = useState<string>();
   const [status, setStatus] = useState<string>();
+  const [progress, setProgress] = useState<UpdateProgress>();
   const [busy, setBusy] = useState(false);
+  const android = /Android/i.test(navigator.userAgent);
 
   useEffect(() => {
     getVersion().then(setVersion, () => undefined);
@@ -115,7 +119,9 @@ function Updates() {
 
   async function check() {
     setBusy(true);
+    setProgress(undefined);
     setStatus("Checking for updates…");
+    let unlisten: (() => void) | undefined;
     try {
       const info = await invoke<UpdateStatus>("check_update");
       if (!info.available || !info.url) {
@@ -123,20 +129,44 @@ function Updates() {
         return;
       }
       setStatus(`Downloading ${info.latest ?? "the update"}…`);
-      if (/Android/i.test(navigator.userAgent)) await invoke("plugin:quoteshare|install_apk", { url: info.url });
-      else await invoke("install_update", { url: info.url });
-      setStatus(/Android/i.test(navigator.userAgent) ? "Allow the install on the next screen." : "Update installed. LumaRead is opening again.");
+      unlisten = await listen<UpdateProgress>("update-progress", (event) => {
+        setProgress(event.payload);
+        if (event.payload.phase === "install") {
+          setStatus(android ? "Confirm the install if Android asks. LumaRead will reopen." : "Installing. LumaRead will reopen.");
+        }
+      });
+      await invoke("install_update", { url: info.url });
+      setStatus(android ? "Confirm the install if Android asks. LumaRead will reopen." : "Installing. LumaRead will reopen.");
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
+      setProgress(undefined);
     } finally {
+      unlisten?.();
       setBusy(false);
     }
   }
+
+  const pct = progress?.total ? Math.min(100, Math.round((progress.received / progress.total) * 100)) : undefined;
 
   return (
     <div className="update-row">
       <p className="muted">{version ? `Version ${version}` : "LumaRead"}</p>
       <button className="button" disabled={busy} onClick={check}>Check for updates</button>
+      {progress && (
+        <div
+          className="progress update-progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct ?? undefined}
+          aria-label="Update download"
+        >
+          <span className={pct == null ? "indeterminate" : undefined} style={pct == null ? undefined : { width: `${pct}%` }} />
+        </div>
+      )}
+      {progress?.phase === "download" && progress.total ? (
+        <p className="muted small">{formatSize(progress.received)} of {formatSize(progress.total)}</p>
+      ) : null}
       {status && <p className="muted small" role="status">{status}</p>}
     </div>
   );

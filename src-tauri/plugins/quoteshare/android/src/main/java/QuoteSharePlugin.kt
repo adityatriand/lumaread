@@ -1,8 +1,10 @@
 package com.lumaread.quoteshare
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.content.ClipData
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -14,12 +16,10 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.Plugin
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 
 @InvokeArg
 class InstallApkArgs {
-    lateinit var url: String
+    lateinit var path: String
 }
 
 @InvokeArg
@@ -37,7 +37,7 @@ class QuoteSharePlugin(private val activity: Activity) : Plugin(activity) {
         val args = try {
             invoke.parseArgs(InstallApkArgs::class.java)
         } catch (e: Exception) {
-            invoke.reject(e.message ?: "Missing update address")
+            invoke.reject(e.message ?: "Missing update file")
             return
         }
         if (Build.VERSION.SDK_INT >= 26 && !activity.packageManager.canRequestPackageInstalls()) {
@@ -45,46 +45,35 @@ class QuoteSharePlugin(private val activity: Activity) : Plugin(activity) {
             invoke.reject("Allow LumaRead to install updates, then tap Check for updates again.")
             return
         }
+        val file = File(args.path)
+        if (!file.isFile) {
+            invoke.reject("The update file is missing")
+            return
+        }
         Thread {
             try {
-                val dir = File(activity.cacheDir, "quoteshare").apply { mkdirs() }
-                val file = File(dir, "LumaRead-update.apk")
-                var current = URL(args.url)
-                var conn = current.openConnection() as HttpURLConnection
-                var hops = 0
-                while (hops < 5) {
-                    conn.instanceFollowRedirects = false
-                    conn.setRequestProperty("User-Agent", "LumaRead")
-                    conn.connectTimeout = 30_000
-                    conn.readTimeout = 180_000
-                    val code = conn.responseCode
-                    if (code !in 300..399) break
-                    val next = conn.getHeaderField("Location") ?: break
-                    conn.disconnect()
-                    current = URL(current, next)
-                    conn = current.openConnection() as HttpURLConnection
-                    hops++
+                val installer = activity.packageManager.packageInstaller
+                val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
                 }
-                if (conn.responseCode !in 200..299) throw IllegalStateException("Download failed (${conn.responseCode})")
-                conn.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }
-                activity.runOnUiThread {
-                    try {
-                        val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.quoteshare.fileprovider", file)
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "application/vnd.android.package-archive")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                val sessionId = installer.createSession(params)
+                installer.openSession(sessionId).use { session ->
+                    file.inputStream().use { input ->
+                        session.openWrite("lumaread.apk", 0, file.length()).use { output ->
+                            input.copyTo(output)
+                            session.fsync(output)
                         }
-                        activity.packageManager.queryIntentActivities(intent, 0).forEach { match ->
-                            activity.grantUriPermission(match.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        activity.startActivity(intent)
-                        invoke.resolve()
-                    } catch (e: Exception) {
-                        invoke.reject(e.message ?: "Could not open the installer")
                     }
+                    val callback = Intent(activity, UpdateInstallReceiver::class.java)
+                    val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                        (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+                    val pending = PendingIntent.getBroadcast(activity, sessionId, callback, flags)
+                    session.commit(pending.intentSender)
                 }
+                activity.runOnUiThread { invoke.resolve() }
             } catch (e: Exception) {
-                invoke.reject(e.message ?: "Could not download the update")
+                activity.runOnUiThread { invoke.reject(e.message ?: "Could not open the installer") }
             }
         }.start()
     }

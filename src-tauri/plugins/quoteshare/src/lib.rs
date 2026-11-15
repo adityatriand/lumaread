@@ -23,25 +23,30 @@ struct Handle<R: Runtime>(tauri::plugin::PluginHandle<R>);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallApk {
-    pub url: String,
+    pub path: String,
 }
 
-#[tauri::command]
-fn install_apk<R: Runtime>(app: tauri::AppHandle<R>, url: String) -> Result<(), String> {
+/// Install an APK that was already downloaded into app storage.
+pub fn install_file<R: Runtime>(app: &tauri::AppHandle<R>, path: String) -> Result<(), String> {
     #[cfg(target_os = "android")]
     {
         use tauri::Manager;
         return app
             .state::<Handle<R>>()
             .0
-            .run_mobile_plugin::<()>("installApk", InstallApk { url })
+            .run_mobile_plugin::<()>("installApk", InstallApk { path })
             .map_err(|e| e.to_string());
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (app, url);
+        let _ = (app, path);
         Err("Updates install from the disk image on this device".into())
     }
+}
+
+#[tauri::command]
+fn install_apk<R: Runtime>(app: tauri::AppHandle<R>, path: String) -> Result<(), String> {
+    install_file(&app, path)
 }
 
 #[tauri::command]
