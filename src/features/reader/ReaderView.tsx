@@ -18,6 +18,15 @@ import { PdfReader } from "./PdfReader";
 import { SelectionToolbar } from "./SelectionToolbar";
 import type { ReaderProps, TextBridge, TextSelection } from "./types";
 
+// One count per page. A phone scroll fires a new EPUB location on almost every line, so the raw
+// location would record hundreds of pages and the pages-per-hour pace would be nonsense.
+function readingPageKey(anchor: Anchor, label: string): string {
+  if (anchor.kind === "pdf") return `pdf:${anchor.page}`;
+  const page = /Page (\d+) \/ \d+/.exec(label);
+  if (page) return `epub:${page[1]}`;
+  return `part:${label}`;
+}
+
 type Props = Omit<ReaderProps, "annotations" | "onSelect" | "onAnnotationClick" | "tools" | "goTo" | "textRef">;
 
 export function ReaderView(props: Props) {
@@ -132,7 +141,7 @@ export function ReaderView(props: Props) {
           </>
         }
         onLocation={(anchor, percent, label) => {
-          session.location(JSON.stringify(anchor), percent);
+          session.location(readingPageKey(anchor, label), percent);
           setHere({ anchor, label });
           props.onLocation(anchor, percent, label);
         }}

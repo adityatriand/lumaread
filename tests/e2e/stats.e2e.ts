@@ -58,8 +58,10 @@ test("reading time, pages and streak are tracked and shown per book and overall"
   await expect(tiles).toContainText("Sessions1");
   await expect(page.locator(".session-list li")).toHaveCount(1);
 
-  await page.getByLabel("From").fill("2026-10-19");
-  await page.getByLabel("To").fill("2026-10-19");
+  await page.getByRole("button", { name: "From", exact: true }).click();
+  await page.getByRole("dialog", { name: "From" }).locator('[data-date="2026-10-19"]').click();
+  await page.getByRole("button", { name: "To", exact: true }).click();
+  await page.getByRole("dialog", { name: "To" }).locator('[data-date="2026-10-19"]').click();
   await expect(page.locator(".hero-figure")).toHaveText("10m");
   await expect(tiles).toContainText("Pages read2");
   await expect(page.locator(".session-list li")).toHaveCount(1);

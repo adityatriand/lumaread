@@ -99,6 +99,15 @@ export function ShareImageDialog({ heading, alt, caption, fileBase, chart, varia
                   <button key={v.id} role="radio" aria-checked={variant === v.id} aria-pressed={variant === v.id} onClick={() => setVariant(v.id)}>{v.label}</button>
                 ))}
               </div>
+              {chart && (variant === "summary" || variant === "time" || variant === "pages") && (
+                <div className="segmented" role="radiogroup" aria-label="Chart">
+                  {(["bar", "line"] as const).map((c) => (
+                    <button key={c} role="radio" aria-checked={chartStyle === c} aria-pressed={chartStyle === c} onClick={() => setChartStyle(c)}>
+                      {c === "bar" ? "Bar" : "Line"}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="segmented" role="radiogroup" aria-label="Ink">
                 {(["white", "black"] as const).map((name) => (
                   <button key={name} role="radio" aria-checked={ink === name} aria-pressed={ink === name} onClick={() => setInk(name)}>

@@ -403,7 +403,17 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 }
 .card-preview.sticker img { box-shadow: none; border-radius: 0; max-height: 42vh; }
 .segmented.wrap { flex-wrap: wrap; width: 100%; }
-.date-filter { min-width: 180px; }
+.date-field { position: relative; }
+.date-button { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 176px; }
+.date-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: 336px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 12px 32px rgb(20 20 50 / 0.2); }
+.date-field.end .date-pop { left: auto; right: 0; }
+.date-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.date-nav strong { font-size: 1rem; }
+.date-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.date-dow { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 6px 0; }
+.date-grid button { min-height: 44px; border: 0; background: none; border-radius: 10px; padding: 0; font-variant-numeric: tabular-nums; }
+.date-grid button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+.date-grid button:disabled { opacity: 0.28; cursor: default; }
 .update-row { display: grid; gap: 8px; justify-items: start; margin-bottom: 8px; }
 .session-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .session-list li { display: flex; gap: 12px; align-items: baseline; }
@@ -521,6 +531,8 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
   .doc-filter, .doc-filter .select-button { width: 100%; max-width: none; }
   .toolbar-row { flex-direction: column; align-items: stretch; }
   .filter-row > * { flex: 1 1 100%; }
+  .date-field, .date-button { width: 100%; }
+  .date-pop, .date-field.end .date-pop { left: 0; right: auto; width: min(336px, 100%); }
   .page-header h1 { font-size: 1.3rem; }
   .reader-heading h1 { font-size: 0.9rem; }
   /* Location lives in the footer; keeping it in the header fights Find / Read aloud / Bookmark / Chapters */

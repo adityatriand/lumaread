@@ -4,11 +4,12 @@ import { listSessions, type Session } from "../../lib/db";
 import { timeAgo } from "../../lib/format";
 import { ProgressBar } from "../library/DocRow";
 import type { LibraryItem } from "../library/types";
+import { DateField } from "../../components/DateField";
 import { Select } from "../../components/Select";
 import { ShareImageDialog } from "../share/ShareImageDialog";
 import { achievementCaption, renderAchievement, type Achievement, type StatVariant } from "./achievementCard";
 import { BarList, DataTable } from "./charts";
-import { dayKey, daysBetween, estimateRemainingMs, formatDuration, lastDays, streaks, summarize, timeByBook } from "./stats";
+import { byDay, dayKey, daysBetween, estimateRemainingMs, formatDuration, lastDays, streaks, summarize, timeByBook } from "./stats";
 
 interface Props { items: LibraryItem[]; docId: string; onDocChange: (id: string) => void; onOpen: (item: LibraryItem) => void }
 
@@ -75,6 +76,7 @@ export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
     ...(books.length > TOP_BOOKS ? [{ key: "other", label: `${books.length - TOP_BOOKS} other books`, value: books.slice(TOP_BOOKS).reduce((a, b) => a + b.ms, 0) }] : []),
   ];
 
+  const perDay = byDay(inRange, days);
   const achievement: Achievement = {
     period,
     book: item && { title: item.doc.title, author: item.doc.author, percent },
@@ -83,7 +85,8 @@ export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
     streak: streak.current,
     daysRead: summary.daysRead,
     pagesPerHour: summary.pagesPerHour,
-    daily: [summary.ms],
+    daily: perDay.map((d) => d.ms),
+    dailyPages: perDay.map((d) => d.pages),
     days,
   };
   const variants = VARIANTS.filter((v) => (v.id === "book" ? !!item : v.id === "pace" ? summary.pagesPerHour != null : true));
@@ -108,14 +111,8 @@ export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
           <button role="radio" aria-checked={preset === "week"} aria-pressed={preset === "week"} onClick={() => applyRange(week[0], today)}>Week</button>
           <button role="radio" aria-checked={preset === "month"} aria-pressed={preset === "month"} onClick={() => applyRange(month[0], today)}>Month</button>
         </div>
-        <label className="field date-filter">
-          <span className="muted small">From</span>
-          <input className="text-input" type="date" aria-label="From" max={today} value={from} onChange={(e) => applyRange(e.currentTarget.value, to)} />
-        </label>
-        <label className="field date-filter">
-          <span className="muted small">To</span>
-          <input className="text-input" type="date" aria-label="To" max={today} value={to} onChange={(e) => applyRange(from, e.currentTarget.value)} />
-        </label>
+        <DateField label="From" value={from} max={today} onChange={(day) => applyRange(day, to)} />
+        <DateField label="To" value={to} max={today} align="end" onChange={(day) => applyRange(from, day)} />
       </div>
 
       {!forBook.length ? (
@@ -134,7 +131,7 @@ export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
               <div className="stat"><span className="muted small">Sessions</span><strong>{summary.sessions}</strong></div>
               <div className="stat">
                 <span className="muted small">{item ? "Pace" : "Books finished"}</span>
-                <strong>{item ? (allTime.pagesPerHour ? `${allTime.pagesPerHour} pages/h` : "—") : finished}</strong>
+                <strong>{item ? (summary.pagesPerHour ? `${summary.pagesPerHour} pages/h` : "—") : finished}</strong>
               </div>
             </div>
           </section>
@@ -193,6 +190,7 @@ export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
           alt={`Reading achievement: ${achievementCaption(achievement)}`}
           caption={achievementCaption(achievement)}
           fileBase="lumaread-achievement"
+          chart
           variants={variants}
           render={(format, theme, chart, sticker) => renderAchievement(achievement, format, theme, chart, sticker)}
           onClose={() => setSharing(false)}
