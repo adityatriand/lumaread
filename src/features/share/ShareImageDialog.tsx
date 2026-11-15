@@ -30,7 +30,7 @@ export function ShareImageDialog({ heading, alt, caption, fileBase, chart, varia
   const [format, setFormat] = useState<CardFormat>("story");
   const [theme, setTheme] = useState<CardTheme>("luma");
   const [chartStyle, setChartStyle] = useState<ChartStyle>("bar");
-  const [variant, setVariant] = useState(variants?.[0]?.id ?? "summary");
+  const [variant, setVariant] = useState(variants?.[0]?.id ?? "1");
   const [ink, setInk] = useState<Ink>("white");
   const [card, setCard] = useState<{ url: string; blob: Blob }>();
   const [status, setStatus] = useState<string>();
@@ -99,7 +99,7 @@ export function ShareImageDialog({ heading, alt, caption, fileBase, chart, varia
                   <button key={v.id} role="radio" aria-checked={variant === v.id} aria-pressed={variant === v.id} onClick={() => setVariant(v.id)}>{v.label}</button>
                 ))}
               </div>
-              {chart && (variant === "summary" || variant === "time" || variant === "pages") && (
+              {chart && (
                 <div className="segmented" role="radiogroup" aria-label="Chart">
                   {(["bar", "line"] as const).map((c) => (
                     <button key={c} role="radio" aria-checked={chartStyle === c} aria-pressed={chartStyle === c} onClick={() => setChartStyle(c)}>

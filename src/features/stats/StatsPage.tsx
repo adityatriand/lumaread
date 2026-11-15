@@ -24,12 +24,11 @@ function periodLabel(from: string, to: string): string {
 }
 
 const VARIANTS: { id: StatVariant; label: string }[] = [
-  { id: "summary", label: "Summary" },
-  { id: "time", label: "Time" },
-  { id: "pages", label: "Pages" },
-  { id: "streak", label: "Streak" },
-  { id: "pace", label: "Pace" },
-  { id: "book", label: "Book" },
+  { id: "1", label: "Variant 1" },
+  { id: "2", label: "Variant 2" },
+  { id: "3", label: "Variant 3" },
+  { id: "4", label: "Variant 4" },
+  { id: "5", label: "Variant 5" },
 ];
 
 export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
@@ -89,7 +88,7 @@ export function StatsPage({ items, docId, onDocChange, onOpen }: Props) {
     dailyPages: perDay.map((d) => d.pages),
     days,
   };
-  const variants = VARIANTS.filter((v) => (v.id === "book" ? !!item : v.id === "pace" ? summary.pagesPerHour != null : true));
+  const variants = VARIANTS;
 
   return (
     <div className="screen">

@@ -86,10 +86,10 @@ test("reading time, pages and streak are tracked and shown per book and overall"
     const box = await size();
     return !!box && box[0] === 1080 && box[1] > 200 && box[1] < 1600;
   }).toBe(true);
-  await expect(dialog.getByRole("radio", { name: "Summary" })).toHaveAttribute("aria-checked", "true");
-  await dialog.getByRole("radio", { name: "Time" }).click();
-  await expect(dialog.getByRole("radio", { name: "Time" })).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.getByRole("radio", { name: "Variant 1" })).toHaveAttribute("aria-checked", "true");
+  await dialog.getByRole("radio", { name: "Variant 2" }).click();
+  await expect(dialog.getByRole("radio", { name: "Variant 2" })).toHaveAttribute("aria-checked", "true");
   await dialog.getByRole("radio", { name: "Black" }).click();
   await dialog.getByRole("button", { name: "Save image" }).click();
-  await expect.poll(async () => (await invokedCalls(page)).find((c) => c.cmd === "plugin:dialog|save")?.args).toMatchObject({ options: { defaultPath: "lumaread-achievement-time.png" } });
+  await expect.poll(async () => (await invokedCalls(page)).find((c) => c.cmd === "plugin:dialog|save")?.args).toMatchObject({ options: { defaultPath: "lumaread-achievement-2.png" } });
 });
