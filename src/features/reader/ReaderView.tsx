@@ -43,11 +43,15 @@ export function ReaderView(props: Props) {
   const [goTo, setGoTo] = useState<{ anchor: Anchor }>();
   const textRef = useRef<TextBridge>(null);
   const [finding, setFinding] = useState(false);
+  const [findFocus, setFindFocus] = useState(0);
 
-  // ⌘F / Ctrl+F opens find (keys pressed inside an EPUB chapter frame don't reach here; the button does)
+  // ⌘F / Ctrl+F opens find (EPUB chapter frames forward it here)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") (e.preventDefault(), setFinding(true));
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "f") return;
+      e.preventDefault();
+      setFinding(true);
+      setFindFocus((n) => n + 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -177,7 +181,7 @@ export function ReaderView(props: Props) {
       )}
       {sharing && <ShareQuoteDialog {...sharing} title={doc.title} author={doc.author} onClose={() => setSharing(undefined)} />}
       {marked && <div className="bookmark-ribbon" aria-hidden="true" />}
-      {finding && <FindBar docId={doc.id} bridge={textRef} scanned={doc.scanned} onClose={() => setFinding(false)} />}
+      {finding && <FindBar docId={doc.id} bridge={textRef} scanned={doc.scanned} focusSignal={findFocus} onClose={() => setFinding(false)} />}
       <ReadingTimer docId={doc.id} session={session} />
       <ReadAloudBar player={player} location={here?.label} chapters={doc.format === "epub"} />
       {message && <div className="toast info" role="status">{message}</div>}

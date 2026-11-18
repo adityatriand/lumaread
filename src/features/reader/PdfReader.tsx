@@ -5,12 +5,13 @@ import type { Annotation } from "../../lib/db";
 import { openPdf } from "../../lib/pdf";
 import { containsPoint, mergeRects, normalizeRects } from "../../lib/rects";
 import { paintOcrLayer } from "../ocr/ocrLayer";
-import { findRange } from "../readaloud/findText";
+import { findAllRanges, findRange } from "../readaloud/findText";
 import { ocrText } from "../ocr/ocr";
 import { useOcr, type OcrStatus } from "../ocr/useOcr";
 import { Select } from "../../components/Select";
 import { effectiveLayout, type Layout } from "../settings/prefs";
 import { pageOverlay } from "./pageOverlay";
+import { revealMark } from "./revealMark";
 import { ReaderChrome } from "./ReaderChrome";
 import type { ReaderProps } from "./types";
 
@@ -47,7 +48,7 @@ function paintHighlights(viewer: Viewer, page: number, annotations: Annotation[]
   }
 }
 
-interface Spoken { page: number; text: string; from: number; end: number; nth?: number }
+interface Spoken { page: number; text: string; from: number; end: number; nth?: number; find?: boolean }
 
 // Read aloud: tint the sentence being spoken, found in the page's selectable text (OCR words on scanned pages).
 // Returns where the match ended so the next sentence searches past it (repeated phrases).
@@ -60,11 +61,29 @@ function paintSpoken(root: HTMLElement, viewer: Viewer, spoken: Spoken | undefin
   if (!found || !layer) return undefined;
   for (const r of mergeRects(normalizeRects([...found.range.getClientRects()], pageBox(div!)))) {
     const el = document.createElement("div");
-    el.className = "speak-mark";
+    el.className = spoken!.find ? "find-current" : "speak-mark";
     Object.assign(el.style, { left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` });
     layer.appendChild(el);
   }
   return found.endChar;
+}
+
+function paintFound(viewer: Viewer, page: number, texts: string[] | undefined) {
+  const div = viewer.getPageView(page - 1)?.div;
+  div?.querySelector(":scope > .find-layer")?.remove();
+  const text = texts?.length && (div?.querySelector(".ocrLayer") ?? div?.querySelector(".textLayer"));
+  const ranges = text ? findAllRanges(text, texts!) : [];
+  const layer = ranges.length && pageOverlay(div!, "find-layer");
+  if (!layer) return;
+  const box = pageBox(div!);
+  for (const range of ranges) {
+    for (const r of mergeRects(normalizeRects([...range.getClientRects()], box))) {
+      const el = document.createElement("div");
+      el.className = "find-mark";
+      Object.assign(el.style, { left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` });
+      layer.appendChild(el);
+    }
+  }
 }
 
 type ViewerModule = typeof import("pdfjs-dist/web/pdf_viewer.mjs");
@@ -94,19 +113,25 @@ export function PdfReader({ doc, bytes, initial, goTo, prefs, annotations, tools
   annotationsRef.current = annotations;
 
   const spokenRef = useRef<Spoken>(undefined);
+  const revealRef = useRef(false);
   // Page DOM is rebuilt on render, zoom and OCR, so the read-aloud mark is repainted after each
   const repaintSpoken = (page?: number) => {
     const s = spokenRef.current;
     if (!viewerRef.current || !containerRef.current || (page !== undefined && s?.page !== page)) return;
     const end = paintSpoken(containerRef.current, viewerRef.current, s);
     if (s && end) s.end = end;
+    if (!end || !revealRef.current) return;
+    revealRef.current = false;
+    revealMark(containerRef.current.querySelector(".find-current"), containerRef.current);
   };
   const repaintRef = useRef(repaintSpoken);
   repaintRef.current = repaintSpoken;
+  const foundRef = useRef(new Map<number, string[]>());
 
   const ocr = useOcr(doc.id, !!doc.scanned, (page, words) => {
     const div = viewerRef.current?.getPageView(page - 1)?.div;
     if (div?.querySelector(".canvasWrapper canvas")) paintOcrLayer(div, words);
+    if (viewerRef.current) paintFound(viewerRef.current, page, foundRef.current.get(page));
     repaintRef.current(page);
   });
   const ocrRef = useRef(ocr);
@@ -146,9 +171,13 @@ export function PdfReader({ doc, bytes, initial, goTo, prefs, annotations, tools
         paintHighlights(viewer, pageNumber, annotationsRef.current);
         const words = ocrRef.current.words(pageNumber);
         if (words) paintOcrLayer(source.div, words);
+        paintFound(viewer, pageNumber, foundRef.current.get(pageNumber));
         repaintRef.current(pageNumber);
       });
-      eventBus.on("textlayerrendered", ({ pageNumber }: { pageNumber: number }) => repaintRef.current(pageNumber));
+      eventBus.on("textlayerrendered", ({ pageNumber }: { pageNumber: number }) => {
+        paintFound(viewer, pageNumber, foundRef.current.get(pageNumber));
+        repaintRef.current(pageNumber);
+      });
       viewer.setDocument(pdf);
       linkService.setDocument(pdf);
       viewerRef.current = viewer;
@@ -180,8 +209,22 @@ export function PdfReader({ doc, bytes, initial, goTo, prefs, annotations, tools
       },
       mark: (spot) => {
         const prev = spokenRef.current;
-        spokenRef.current = spot ? { page: spot.unit, text: spot.chunk.text, from: prev?.page === spot.unit ? prev.end : 0, end: 0, nth: spot.nth } : undefined;
+        spokenRef.current = spot ? { page: spot.unit, text: spot.chunk.text, from: prev?.page === spot.unit ? prev.end : 0, end: 0, nth: spot.nth, find: spot.find } : undefined;
+        revealRef.current = !!spot?.find;
         repaintRef.current();
+      },
+      markAll: (spots) => {
+        const before = foundRef.current;
+        const found = new Map<number, string[]>();
+        for (const s of spots ?? []) {
+          const texts = found.get(s.unit);
+          if (texts) texts.push(s.chunk.text);
+          else found.set(s.unit, [s.chunk.text]);
+        }
+        foundRef.current = found;
+        const viewer = viewerRef.current;
+        if (!viewer) return;
+        for (const page of new Set([...before.keys(), ...found.keys()])) paintFound(viewer, page, found.get(page));
       },
       // Scanned pages have no text until recognised; recognise the page about to be read first
       textOf: async (unit) => {

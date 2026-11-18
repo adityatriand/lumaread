@@ -253,10 +253,28 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .speak-layer { pointer-events: none; z-index: 1; }
 .speak-mark { position: absolute; background: var(--accent); opacity: 0.22; mix-blend-mode: multiply; border-radius: 3px; }
 .reader.theme-dark .speak-mark { mix-blend-mode: screen; opacity: 0.4; }
+.reader { --find: #facc15; --find-current: #f97316; }
+.find-layer { pointer-events: none; z-index: 1; }
+.find-mark, .find-current { position: absolute; mix-blend-mode: multiply; border-radius: 3px; }
+.find-mark { background: var(--find); opacity: 0.55; }
+.find-current { background: var(--find-current); opacity: 0.75; box-shadow: 0 0 0 2px var(--find-current); }
+.reader.theme-dark :is(.find-mark, .find-current) { mix-blend-mode: screen; }
+.reader.theme-dark .find-mark { opacity: 0.45; }
+.reader.theme-dark .find-current { opacity: 0.65; }
+.book-view svg :is(g.find-mark, g.find-current) { pointer-events: none; mix-blend-mode: multiply; }
+.book-view svg g.find-mark rect { fill: var(--find); fill-opacity: 0.55; }
+.book-view svg g.find-mark line { stroke: none; }
+.book-view svg g.find-current { fill: var(--find-current); fill-opacity: 0.75; }
+.reader.theme-dark .book-view svg :is(g.find-mark, g.find-current) { mix-blend-mode: screen; }
+.reader.theme-dark .book-view svg g.find-mark rect { fill-opacity: 0.45; }
+.reader.theme-dark .book-view svg g.find-current { fill-opacity: 0.65; }
 /* Find in book: stays on screen while the reader bars hide */
 .find-bar { position: fixed; top: calc(64px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 17; display: flex; align-items: center; gap: 4px; width: min(480px, calc(100% - 24px)); padding: 4px 4px 4px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 8px 28px rgb(20 20 50 / 0.16); }
 .find-bar input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: none; border: 0; outline: 0; min-height: 36px; }
 .find-status { white-space: nowrap; padding: 0 4px; font-variant-numeric: tabular-nums; }
+.find-results { position: absolute; top: calc(100% + 6px); left: 0; right: 0; max-height: min(50vh, 360px); overflow-y: auto; list-style: none; margin: 0; padding: 4px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 8px 28px rgb(20 20 50 / 0.16); }
+.find-result { display: grid; gap: 2px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.find-result:hover, .find-result[aria-current="true"] { background: var(--accent-soft); }
 /* Ribbon on the page while the current place is bookmarked */
 .bookmark-ribbon { position: fixed; top: env(safe-area-inset-top); right: 32px; z-index: 14; width: 18px; height: 34px; background: var(--accent); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%); pointer-events: none; }
 :root.mac .bookmark-ribbon { top: 0; }

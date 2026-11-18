@@ -7,6 +7,8 @@ import { LINE_HEIGHTS, THEMES, effectiveLayout, type Layout, type ReadingPrefs }
 import { Select } from "../../components/Select";
 import { resolveHref } from "./epubHref";
 import { ReaderChrome } from "./ReaderChrome";
+import { revealMark } from "./revealMark";
+import type { Chunk } from "../readaloud/speech";
 import type { ReaderProps, TextBridge } from "./types";
 
 // Book pages render in an iframe, so the app's bundled font has to be declared inside it
@@ -62,6 +64,19 @@ function pointAt(doc: Document, offset: number): { node: Node; offset: number } 
   return undefined;
 }
 
+function pointsAt(doc: Document, offsets: number[]): ({ node: Node; offset: number } | undefined)[] {
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  let base = 0;
+  return offsets.map((offset) => {
+    while (node && offset > base + node.textContent!.length) {
+      base += node.textContent!.length;
+      node = walker.nextNode();
+    }
+    return node ? { node, offset: offset - base } : undefined;
+  });
+}
+
 export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tools, textRef, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
   const viewRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition>(null);
@@ -103,6 +118,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
       display(typeof target === "string" ? resolveHref(target, spineHrefs()) : target)) as typeof rendition.display;
     setRenditionId((n) => n + 1);
     drawnRef.current.clear();
+    foundDrawn.current = { units: new Set(), cfis: [] };
     rendition.hooks.content.register((contents: Contents) => {
       const style = contents.document.createElement("style");
       style.textContent = FONT_FACE;
@@ -115,6 +131,11 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
         settle = setTimeout(() => reportSelection(contents), 250); // let drag handles and double-clicks settle
       };
       for (const type of ["selectionchange", "mouseup", "touchend", "keyup"]) contents.document.addEventListener(type, check);
+      contents.document.addEventListener("keydown", (e) => {
+        if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "f") return;
+        e.preventDefault();
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, cancelable: true }));
+      });
       // Taps inside the chapter iframe don't reach the reader; replay plain ones on the host so the bars toggle
       contents.document.addEventListener("click", (e) => {
         if (!(e.target as Element).closest?.("a") && contents.window.getSelection()?.isCollapsed !== false) viewRef.current?.click();
@@ -204,6 +225,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
       setTimeout(fillScreen, 50); // after the new chapter has measured its height
       const pending = pendingMark.current;
       if (pending?.unit === section.index) textRef?.current?.mark(pending);
+      drawFoundRef.current?.(section.index);
     });
 
     rendition
@@ -224,6 +246,9 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
 
   const spokenCfi = useRef<string>(undefined); // mark currently drawn (read aloud, find)
   const pendingMark = useRef<Parameters<TextBridge["mark"]>[0]>(null); // asked for before its chapter was loaded
+  const foundRef = useRef(new Map<number, Chunk[]>());
+  const foundDrawn = useRef<{ units: Set<number>; cfis: string[] }>({ units: new Set(), cfis: [] });
+  const drawFoundRef = useRef<(unit: number) => void>(undefined);
 
   useEffect(() => {
     if (!textRef) return;
@@ -232,8 +257,30 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
       const loc = renditionRef.current?.currentLocation() as unknown as Loc | undefined;
       return loc?.start ? loc : undefined; // {} until the first page is shown
     };
-    const contentsOf = (index: number) =>
-      (renditionRef.current?.getContents() as unknown as (Contents & { sectionIndex: number })[] | undefined)?.find((c) => c.sectionIndex === index);
+    const loadedContents = () => renditionRef.current?.getContents() as unknown as (Contents & { sectionIndex: number })[] | undefined;
+    const contentsOf = (index: number) => loadedContents()?.find((c) => c.sectionIndex === index);
+    const drawFound = (unit: number) => {
+      const rendition = renditionRef.current;
+      const contents = contentsOf(unit);
+      const chunks = foundRef.current.get(unit);
+      if (!rendition || !contents || !chunks || foundDrawn.current.units.has(unit)) return;
+      foundDrawn.current.units.add(unit);
+      const points = pointsAt(contents.document, chunks.flatMap((c) => [c.start, c.end]));
+      chunks.forEach((_, i) => {
+        const start = points[i * 2];
+        const end = points[i * 2 + 1];
+        if (!start || !end) return;
+        const range = contents.document.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+        const cfi = contents.cfiFromRange(range);
+        foundDrawn.current.cfis.push(cfi);
+        rendition.annotations.underline(cfi, {}, () => undefined, "find-mark");
+      });
+    };
+    drawFoundRef.current = drawFound;
+    const revealFind = () =>
+      revealMark(viewRef.current?.querySelector("svg g.find-current"), viewRef.current?.querySelector<HTMLElement>(".epub-container"));
     textRef.current = {
       position() {
         const loc = location();
@@ -255,7 +302,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
         const loc = location();
         if (!rendition || !loc) return;
         const contents = contentsOf(unit);
-        if (!contents) return void rendition.display(unit);
+        if (!contents) return void rendition.display(unit).then(revealFind, () => undefined);
         // Text offset → the DOM text node holding it → a CFI epub.js can display
         const at = pointAt(contents.document, offset);
         if (!at) return;
@@ -263,7 +310,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
         range.setStart(at.node, at.offset);
         const cfi = contents.cfiFromRange(range);
         const compare = new EpubCFI();
-        if (compare.compare(cfi, loc.start.cfi) < 0 || compare.compare(cfi, loc.end.cfi) > 0) rendition.display(cfi);
+        if (compare.compare(cfi, loc.start.cfi) < 0 || compare.compare(cfi, loc.end.cfi) > 0) rendition.display(cfi).then(revealFind, () => undefined);
       },
       mark(spoken) {
         const rendition = renditionRef.current;
@@ -279,11 +326,28 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
         range.setStart(start.node, start.offset);
         range.setEnd(end.node, end.offset);
         spokenCfi.current = contents.cfiFromRange(range);
+        if (spoken!.find) {
+          rendition.annotations.highlight(spokenCfi.current, {}, () => undefined, "find-current");
+          return revealFind();
+        }
         rendition.annotations.highlight(spokenCfi.current, {}, () => undefined, "speak-mark", {
           fill: "#5b5bd6",
           "fill-opacity": prefsRef.current.theme === "dark" ? "0.4" : "0.22",
           "mix-blend-mode": prefsRef.current.theme === "dark" ? "screen" : "multiply", // multiply vanishes on a dark page
         });
+      },
+      markAll(spots) {
+        const rendition = renditionRef.current;
+        for (const cfi of foundDrawn.current.cfis) rendition?.annotations.remove(cfi, "underline");
+        foundDrawn.current = { units: new Set(), cfis: [] };
+        const found = new Map<number, Chunk[]>();
+        for (const s of spots ?? []) {
+          const chunks = found.get(s.unit);
+          if (chunks) chunks.push(s.chunk);
+          else found.set(s.unit, [s.chunk]);
+        }
+        foundRef.current = found;
+        for (const c of loadedContents() ?? []) drawFound(c.sectionIndex);
       },
     };
     return () => void (textRef.current = null);
