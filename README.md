@@ -5,7 +5,7 @@
 **A private, offline reading library for macOS and Android.**<br />
 Read EPUB and PDF, highlight, take notes, look words up, translate, listen, and track your reading, all on your device.
 
-![Version](https://img.shields.io/badge/version-1.1.8-5b5bd6)
+![Version](https://img.shields.io/badge/version-1.1.9-5b5bd6)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%2013.3%2B%20%7C%20Android-1b1b2f)
 ![Offline](https://img.shields.io/badge/works-100%25%20offline-2ea44f)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white)
@@ -132,13 +132,25 @@ E2E tests stub `globalThis.isTauri` and Tauri's IPC to drive the UI in a browser
 
 ## Release
 
-Bump the version before building. Android rejects an update whose version is not higher. `pnpm version:bump` writes the same number into `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`. Tauri turns that into Android's versionCode (`major * 1000000 + minor * 1000 + patch`), so a patch bump is enough.
+One command bumps the version, commits, pushes, and builds the Apple Silicon DMG and the ARM64 APK. Android rejects an update whose version is not higher. The bump writes the same number into `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`. Tauri turns that into Android's versionCode (`major * 1000000 + minor * 1000 + patch`), so a patch bump is enough.
+
+```sh
+pnpm release                 # upload the installers with rclone, then delete the build output
+pnpm release --manual        # copy LumaRead-macos-aarch64.dmg and LumaRead-android-arm64.apk into ~/Downloads
+pnpm release --finish        # after those Drive files are replaced: write version.txt, then delete the build output
+pnpm release minor           # bump the minor (or major) instead of the patch
+```
+
+`--rclone` is the default. `--manual` leaves `version.txt` unchanged until `pnpm release --finish`, so installed apps are not offered the new version before the files exist. Replace the Drive files in place. A second copy gets a new id and breaks updates.
+
+The individual steps are still available:
 
 ```sh
 pnpm version:bump                                              # 1.1.0 → 1.1.1 (or: pnpm version:bump minor | major)
 pnpm tauri build --target aarch64-apple-darwin --bundles dmg   # Apple Silicon
 pnpm tauri build --target x86_64-apple-darwin --bundles dmg    # Intel Macs (rustup target add x86_64-apple-darwin)
 pnpm tauri android build --apk --target aarch64                 # signed APK for 64-bit ARM phones (nearly all in use)
+pnpm publish:update                                            # rclone only, after a local build
 ```
 
 | Platform | Signing |
@@ -149,8 +161,8 @@ pnpm tauri android build --apk --target aarch64                 # signed APK for
 > [!WARNING]
 > Back up `~/.lumaread-release/`. Without that key, no update can ever be signed for installed Android apps.
 
-- **Version** is bumped with `pnpm version:bump` before a release. Android's versionCode is derived from it.
-- **Updates:** Build locally, then `pnpm publish:update`. That overwrites the DMG, APK, and `version.txt` in the shared Google Drive folder, so the folder stays one build in size and nothing is stored in the git repo. Settings → About → Check for updates downloads that build and installs it. On macOS it runs `xattr -cr` after install. The upload uses rclone (`brew install rclone`), signed in once on this Mac to the Drive folder.
+- **Version** is bumped by `pnpm release` before a build. Android's versionCode is derived from it.
+- **Updates:** `pnpm release` overwrites the DMG, APK, and `version.txt` in the shared Google Drive folder, so the folder stays one build in size and nothing is stored in the git repo. `pnpm release --manual` copies the same file names into Downloads for a hand upload, and `pnpm release --finish` writes `version.txt` once those files are replaced. Settings → About → Check for updates downloads that build and installs it. On macOS it runs `xattr -cr` after install. The upload uses rclone (`brew install rclone`), signed in once on this Mac to the Drive folder.
 - **Size:** Tauri compresses the web assets (~46 MB, mostly translation models) into the native binary, so each CPU architecture in a package carries its own copy. A universal APK (4 ABIs) is ~187 MB; one architecture per package is ~50 MB. Add `--target armv7` for old 32-bit phones; x86 / x86_64 are only emulators.
 
 ## Architecture
