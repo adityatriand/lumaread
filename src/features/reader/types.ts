@@ -18,7 +18,8 @@ export interface TextBridge {
   show: (unit: number, offset: number) => void; // bring that spot on screen if it isn't already
   // Highlight a stretch of text (the sentence being read, a find match); null clears it. `nth` picks which
   // occurrence of identical text on that unit, for engines that locate text by matching (PDF)
-  mark: (spot: { unit: number; chunk: Chunk; nth?: number } | null) => void;
+  mark: (spot: { unit: number; chunk: Chunk; nth?: number; find?: boolean } | null) => void;
+  markAll?: (spots: { unit: number; chunk: Chunk }[] | null) => void;
   textOf?: (unit: number) => Promise<string | undefined>; // fresher text than the store has (scanned PDFs: OCR on demand)
 }
 

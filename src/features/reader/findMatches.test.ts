@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMatches } from "./findMatches";
+import { findMatches, matchSnippet } from "./findMatches";
 
 const t = (unit: number, text: string) => ({ docId: "d", unit, label: `Page ${unit}`, text, source: "text" as const });
 
@@ -16,5 +16,18 @@ describe("find in book", () => {
 
   it("needs two characters", () => {
     expect(findMatches([t(1, "a b c")], " a ")).toEqual([]);
+  });
+});
+
+describe("match snippet", () => {
+  it("keeps context around the match on one line, with ellipses where cut", () => {
+    const text = `${"x".repeat(50)} the cafe\nopens ${"y".repeat(50)}`;
+    const [m] = findMatches([t(1, text)], "cafe");
+    const s = matchSnippet(text, m);
+    expect(s.hit).toBe("cafe");
+    expect(s.before.startsWith("…")).toBe(true);
+    expect(s.before.endsWith(" the ")).toBe(true);
+    expect(s.after.startsWith(" opens ")).toBe(true);
+    expect(s.after.endsWith("…")).toBe(true);
   });
 });

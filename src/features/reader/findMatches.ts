@@ -23,3 +23,14 @@ export function findMatches(texts: DocText[], query: string): Match[] {
   }
   return out;
 }
+
+export function matchSnippet(text: string, { start, end }: Match): { before: string; hit: string; after: string } {
+  const from = Math.max(0, start - 40);
+  const to = Math.min(text.length, end + 40);
+  const flat = (s: string) => s.replace(/\s+/g, " ");
+  return {
+    before: (from > 0 ? "…" : "") + flat(text.slice(from, start)).trimStart(),
+    hit: text.slice(start, end),
+    after: flat(text.slice(end, to)).trimEnd() + (to < text.length ? "…" : ""),
+  };
+}
