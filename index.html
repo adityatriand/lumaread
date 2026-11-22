@@ -7,10 +7,44 @@
     <!-- In-app font size / PDF zoom only: pinch must not scale chrome -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>LumaRead</title>
+    <script>
+      try {
+        var prefs = JSON.parse(localStorage.getItem("reading-prefs") || "{}");
+        var theme = prefs.appTheme || "light";
+        if (theme === "system") theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
+    <style>
+      #splash { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: #f7f7fb; animation: splash-leave 0.4s ease 1.15s forwards; }
+      html[data-theme="dark"] #splash { background: #121218; }
+      .splash-mark { position: relative; width: 112px; height: 112px; }
+      .splash-mark img { width: 112px; height: 112px; border-radius: 28px; animation: splash-in 0.7s cubic-bezier(0.2, 0.85, 0.2, 1) both; }
+      .splash-flash { position: absolute; inset: -8px; border-radius: 50%; border: 3px solid #7c6cf0; opacity: 0; animation: splash-flash 0.85s ease 0.2s both; }
+      @keyframes splash-in { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: scale(1); } }
+      @keyframes splash-flash { from { opacity: 0.65; transform: scale(0.75); } to { opacity: 0; transform: scale(1.4); } }
+      @keyframes splash-leave { to { opacity: 0; visibility: hidden; } }
+      @media (prefers-reduced-motion: reduce) {
+        .splash-mark img, .splash-flash { animation: none; }
+        #splash { animation-delay: 0.35s; animation-duration: 0.2s; }
+      }
+    </style>
   </head>
 
   <body>
+    <div id="splash" aria-hidden="true">
+      <div class="splash-mark">
+        <span class="splash-flash"></span>
+        <img src="/lumaread-ico.jpeg" alt="" width="112" height="112" />
+      </div>
+    </div>
     <div id="root"></div>
+    <script>
+      var splash = document.getElementById("splash");
+      splash.addEventListener("animationend", function (e) {
+        if (e.animationName === "splash-leave") splash.remove();
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
