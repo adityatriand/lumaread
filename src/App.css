@@ -236,6 +236,7 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .pdf-container.layout-horizontal .page { scroll-snap-align: center; scroll-snap-stop: always; }
 /* Not ".epub-view": epub.js gives each chapter wrapper that class, and this padding would squeeze them to 0 width */
 .book-view { height: 100%; max-width: 980px; margin: 0 auto; padding: 24px 24px 0; }
+.reader .book-view :is(.epub-container, .epub-view, iframe) { background: var(--page-bg); }
 .popover { position: absolute; right: 12px; top: calc(100% + 4px); z-index: 20; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 32px rgb(20 20 50 / 0.15); padding: 16px; width: min(340px, calc(100% - 24px)); }
 .popover .segmented.wide { width: 100%; }
 .popover .segmented.wide > * { flex: 1; justify-content: center; }

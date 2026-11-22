@@ -7,25 +7,23 @@
     <!-- In-app font size / PDF zoom only: pinch must not scale chrome -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>LumaRead</title>
-    <script>
-      try {
-        var prefs = JSON.parse(localStorage.getItem("reading-prefs") || "{}");
-        var theme = prefs.appTheme || "light";
-        if (theme === "system") theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        document.documentElement.dataset.theme = theme;
-      } catch (e) {}
-    </script>
+    <script src="/splash.js"></script>
     <style>
-      #splash { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: #f7f7fb; animation: splash-leave 0.4s ease 1.15s forwards; }
+      #splash { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: #f7f7fb; animation: splash-leave 0.4s ease 1.8s forwards; }
       html[data-theme="dark"] #splash { background: #121218; }
+      .splash-brand { display: grid; justify-items: center; gap: 40px; }
       .splash-mark { position: relative; width: 112px; height: 112px; }
       .splash-mark img { width: 112px; height: 112px; border-radius: 28px; animation: splash-in 0.7s cubic-bezier(0.2, 0.85, 0.2, 1) both; }
       .splash-flash { position: absolute; inset: -8px; border-radius: 50%; border: 3px solid #7c6cf0; opacity: 0; animation: splash-flash 0.85s ease 0.2s both; }
+      .splash-word { display: flex; gap: 0.16em; margin: 0; font-family: system-ui, -apple-system, Roboto, "Noto Sans", sans-serif; font-size: 22px; font-weight: 650; color: #1b1b2f; }
+      .splash-word span { display: block; animation: splash-letter 0.5s cubic-bezier(0.2, 0.85, 0.2, 1) both; animation-delay: calc(0.45s + (var(--i) * 0.07s)); }
+      html[data-theme="dark"] .splash-word { color: #ececf3; }
       @keyframes splash-in { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: scale(1); } }
       @keyframes splash-flash { from { opacity: 0.65; transform: scale(0.75); } to { opacity: 0; transform: scale(1.4); } }
+      @keyframes splash-letter { from { opacity: 0; transform: translateY(16px); filter: blur(8px); } to { opacity: 1; transform: none; filter: none; } }
       @keyframes splash-leave { to { opacity: 0; visibility: hidden; } }
       @media (prefers-reduced-motion: reduce) {
-        .splash-mark img, .splash-flash { animation: none; }
+        .splash-mark img, .splash-flash, .splash-word span { animation: none; }
         #splash { animation-delay: 0.35s; animation-duration: 0.2s; }
       }
     </style>
@@ -33,18 +31,15 @@
 
   <body>
     <div id="splash" aria-hidden="true">
-      <div class="splash-mark">
-        <span class="splash-flash"></span>
-        <img src="/lumaread-ico.jpeg" alt="" width="112" height="112" />
+      <div class="splash-brand">
+        <div class="splash-mark">
+          <span class="splash-flash"></span>
+          <img src="/lumaread-ico.jpeg" alt="" width="112" height="112" />
+        </div>
+        <p class="splash-word" aria-label="LumaRead"><span style="--i:0">L</span><span style="--i:1">u</span><span style="--i:2">m</span><span style="--i:3">a</span><span style="--i:4">R</span><span style="--i:5">e</span><span style="--i:6">a</span><span style="--i:7">d</span></p>
       </div>
     </div>
     <div id="root"></div>
-    <script>
-      var splash = document.getElementById("splash");
-      splash.addEventListener("animationend", function (e) {
-        if (e.animationName === "splash-leave") splash.remove();
-      });
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

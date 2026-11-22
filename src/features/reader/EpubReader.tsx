@@ -32,21 +32,37 @@ const BOOK_CSP = `<meta http-equiv="Content-Security-Policy" content="script-src
 
 // Our own per-chapter style tag rather than themes.register/select: epub.js never removes a theme's injected
 // stylesheet, so switching back to an earlier page colour left the later one winning. !important beats book CSS.
-const pageCss = (p: ReadingPrefs) =>
-  `html, body { background: ${THEMES[p.theme].background} !important; color: ${THEMES[p.theme].color} !important; }`;
+// Body colour alone leaves chapter text black: books set their own colour on p, div and span. Those have to inherit,
+// and their paper backgrounds have to clear, or sepia and dark only tint the frame around the words.
+const pageCss = (p: ReadingPrefs) => {
+  const { background, color } = THEMES[p.theme];
+  return `html{color-scheme:light;background:${background}!important;color:${color}!important}body{background:${background}!important;color:${color}!important}body *{color:inherit!important;-webkit-text-fill-color:currentColor!important;background-color:transparent!important}`;
+};
 
 function paintPage(doc: Document, p: ReadingPrefs) {
   let style = doc.getElementById("lumaread-page");
   if (!style) {
     style = doc.createElement("style");
     style.id = "lumaread-page";
-    doc.head.appendChild(style);
   }
   style.textContent = pageCss(p);
+  doc.head.appendChild(style); // last in the head, so it wins over a book sheet appended after the first paint
+}
+
+function paintContents(contents: Contents, p: ReadingPrefs) {
+  const { background, color } = THEMES[p.theme];
+  paintPage(contents.document, p);
+  contents.css("background-color", background, true);
+  contents.css("color", color, true);
+  // The iframe's own canvas stays white on Android unless the frame element is painted too
+  const frame = contents.window.frameElement as HTMLElement | null;
+  frame?.style.setProperty("background", background);
+  frame?.parentElement?.style.setProperty("background", background);
+  frame?.closest<HTMLElement>(".epub-container")?.style.setProperty("background", background);
 }
 
 function applyPrefs(rendition: Rendition, p: ReadingPrefs) {
-  for (const c of rendition.getContents() as unknown as Contents[]) paintPage(c.document, p);
+  for (const c of rendition.getContents() as unknown as Contents[]) paintContents(c, p);
   rendition.themes.fontSize(`${p.fontSize}%`);
   rendition.themes.font(`"Source Serif 4 Variable", "Noto Serif", serif`);
   rendition.themes.override("line-height", String(LINE_HEIGHTS[p.lineSpacing]), true);
@@ -126,7 +142,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
       const style = contents.document.createElement("style");
       style.textContent = FONT_FACE;
       contents.document.head.appendChild(style);
-      paintPage(contents.document, prefsRef.current);
+      paintContents(contents, prefsRef.current);
       // Our own selection detection: epub.js's "selected" event never fires in WebKit (the macOS app's webview)
       let settle: ReturnType<typeof setTimeout>;
       const check = () => {
@@ -385,14 +401,30 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
     // A new rendition (layout switch) starts with no highlights drawn
   }, [annotations, renditionId]);
 
+  // The slider asks for a new page on every movement. Display the latest one as soon as the current turn finishes,
+  // instead of stacking a reload for every page the finger passed through.
+  const seekNext = useRef<number | null>(null);
+  const seekBusy = useRef(false);
   function seekPage(page: number) {
-    const book = bookRef.current;
-    const rendition = renditionRef.current;
-    if (!book || !rendition) return;
-    const total = book.locations.length();
-    if (total < 2) return;
-    const cfi = book.locations.cfiFromPercentage((page - 1) / (total - 1));
-    if (cfi) rendition.display(cfi);
+    seekNext.current = page;
+    if (seekBusy.current) return;
+    const step = () => {
+      const book = bookRef.current;
+      const rendition = renditionRef.current;
+      const target = seekNext.current;
+      seekNext.current = null;
+      if (!book || !rendition || target == null) return (seekBusy.current = false);
+      const total = book.locations.length();
+      if (total < 2) return (seekBusy.current = false);
+      const cfi = book.locations.cfiFromPercentage((target - 1) / (total - 1));
+      if (!cfi) return (seekBusy.current = false);
+      seekBusy.current = true;
+      Promise.resolve(rendition.display(cfi)).then(
+        () => (seekBusy.current = false, seekNext.current != null && step()),
+        () => (seekBusy.current = false, seekNext.current != null && step()),
+      );
+    };
+    step();
   }
 
   return (

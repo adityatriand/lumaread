@@ -24,22 +24,25 @@ interface Props {
 
 const INTRO_MS = 3000; // bars show briefly on open so the reader knows they exist
 
-// The page pill follows the thumb. Dragging previews a page and jumps only when the finger lifts,
-// so an EPUB does not reload a chapter on every movement.
+// The page pill follows the thumb, and the book turns as the thumb moves. The last page stays shown until the
+// reader catches up, so the thumb does not jump backward at the end of a drag.
 function PageSlider({ page, total, onSeek }: { page: number; total: number; onSeek: (page: number) => void }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const sent = useRef<number | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
   const [showPill, setShowPill] = useState(false);
   const hide = useRef(0);
 
   useEffect(() => {
     if (dragging.current) return;
+    if (drag != null && page !== drag) return;
+    if (drag != null) setDrag(null);
     setShowPill(true);
     window.clearTimeout(hide.current);
     hide.current = window.setTimeout(() => setShowPill(false), 800);
     return () => window.clearTimeout(hide.current);
-  }, [page]);
+  }, [page, drag]);
 
   const shown = drag ?? page;
   const ratio = total <= 1 ? 0 : (shown - 1) / (total - 1);
@@ -51,26 +54,32 @@ function PageSlider({ page, total, onSeek }: { page: number; total: number; onSe
     return Math.round(t * (total - 1)) + 1;
   }
 
+  function seek(n: number) {
+    setDrag(n);
+    if (sent.current === n || (sent.current == null && n === page)) return;
+    sent.current = n;
+    onSeek(n);
+  }
+
   function onPointerDown(e: PointerEvent) {
     e.preventDefault();
     e.stopPropagation();
     dragging.current = true;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setDrag(pageAt(e.clientY));
     setShowPill(true);
+    seek(pageAt(e.clientY));
   }
 
   function onPointerMove(e: PointerEvent) {
     if (!dragging.current) return;
-    setDrag(pageAt(e.clientY));
+    seek(pageAt(e.clientY));
   }
 
   function onPointerUp(e: PointerEvent) {
     if (!dragging.current) return;
     dragging.current = false;
-    const target = pageAt(e.clientY);
-    setDrag(null);
-    if (target !== page) onSeek(target);
+    seek(pageAt(e.clientY));
+    sent.current = null;
   }
 
   return (
