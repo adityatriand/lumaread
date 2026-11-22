@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Settings2 } from "lucide-react";
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { useOutsideClose } from "../../components/useOutsideClose";
 import { ReadingPrefsForm } from "../settings/ReadingPrefsForm";
 import type { ReadingPrefs } from "../settings/prefs";
@@ -7,6 +7,8 @@ import type { ReadingPrefs } from "../settings/prefs";
 interface Props {
   title: string;
   location: string;
+  /** Current page and length, so a side slider can show "12/240" and jump. Omitted until the book has pages. */
+  scrub?: { page: number; total: number; onSeek: (page: number) => void };
   onClose: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -22,7 +24,78 @@ interface Props {
 
 const INTRO_MS = 3000; // bars show briefly on open so the reader knows they exist
 
-export function ReaderChrome({ title, location, onClose, onPrev, onNext, canPrev = true, canNext = true, tools, prefs, theme = "light", prefsExtra, status, children }: Props) {
+// The page pill follows the thumb. Dragging previews a page and jumps only when the finger lifts,
+// so an EPUB does not reload a chapter on every movement.
+function PageSlider({ page, total, onSeek }: { page: number; total: number; onSeek: (page: number) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  const [drag, setDrag] = useState<number | null>(null);
+  const [showPill, setShowPill] = useState(false);
+  const hide = useRef(0);
+
+  useEffect(() => {
+    if (dragging.current) return;
+    setShowPill(true);
+    window.clearTimeout(hide.current);
+    hide.current = window.setTimeout(() => setShowPill(false), 800);
+    return () => window.clearTimeout(hide.current);
+  }, [page]);
+
+  const shown = drag ?? page;
+  const ratio = total <= 1 ? 0 : (shown - 1) / (total - 1);
+  const at = `clamp(28px, ${ratio * 100}%, calc(100% - 28px))`;
+
+  function pageAt(clientY: number) {
+    const box = trackRef.current!.getBoundingClientRect();
+    const t = Math.min(1, Math.max(0, (clientY - box.top) / Math.max(box.height, 1)));
+    return Math.round(t * (total - 1)) + 1;
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging.current = true;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setDrag(pageAt(e.clientY));
+    setShowPill(true);
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (!dragging.current) return;
+    setDrag(pageAt(e.clientY));
+  }
+
+  function onPointerUp(e: PointerEvent) {
+    if (!dragging.current) return;
+    dragging.current = false;
+    const target = pageAt(e.clientY);
+    setDrag(null);
+    if (target !== page) onSeek(target);
+  }
+
+  return (
+    <div
+      ref={trackRef}
+      className={`page-slider${showPill ? " active" : ""}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onClick={(e) => e.stopPropagation()}
+      role="slider"
+      aria-label="Page"
+      aria-valuemin={1}
+      aria-valuemax={total}
+      aria-valuenow={shown}
+      aria-valuetext={`${shown} of ${total}`}
+    >
+      <span className="page-slider-pill" style={{ top: at }}>{shown}/{total}</span>
+      <span className="page-slider-thumb" style={{ top: at }} />
+    </div>
+  );
+}
+
+export function ReaderChrome({ title, location, scrub, onClose, onPrev, onNext, canPrev = true, canNext = true, tools, prefs, theme = "light", prefsExtra, status, children }: Props) {
   const [showPrefs, setShowPrefs] = useState(false);
   // The book fills the screen; the bars float over it, hidden until a tap on the page (or hovering an edge on desktop)
   const [showBars, setShowBars] = useState(true);
@@ -67,6 +140,7 @@ export function ReaderChrome({ title, location, onClose, onPrev, onNext, canPrev
         )}
       </div>
       <div className="reader-body" onClick={onBodyClick}>{children}</div>
+      {scrub && scrub.total > 1 && scrub.page > 0 && <PageSlider page={scrub.page} total={scrub.total} onSeek={scrub.onSeek} />}
       <footer className="reader-bar footer">
         <button className="icon-button" onClick={onPrev} disabled={!canPrev} aria-label="Previous page"><ChevronLeft size={20} /></button>
         <span aria-live="polite">{location}</span>

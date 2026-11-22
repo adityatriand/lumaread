@@ -325,6 +325,7 @@ export function PdfReader({ doc, bytes, initial, goTo, prefs, annotations, tools
       prefsExtra={<div className="phone-only"><Select label="Zoom" className="full" value={zoom} options={zoomOptions} onChange={changeZoom} /></div>}
       canPrev={page > 1}
       canNext={page < pages}
+      scrub={pages > 1 ? { page, total: pages, onSeek: (n) => { if (viewerRef.current) viewerRef.current.currentPageNumber = n; } } : undefined}
       tools={
         <>
           {tools}

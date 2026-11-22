@@ -225,6 +225,10 @@ button:disabled, .button.disabled { opacity: 0.45; cursor: default; }
 .reader-bar.footer > span { min-width: 0; max-width: min(52vw, calc(100% - 200px)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reader-bar select { max-width: 160px; }
 .reader-body { flex: 1; position: relative; min-height: 0; margin: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+.page-slider { position: absolute; z-index: 16; top: 72px; bottom: 72px; right: 0; width: 44px; touch-action: none; cursor: pointer; }
+.page-slider-thumb { position: absolute; right: 6px; width: 6px; height: 56px; margin-top: -28px; border-radius: 6px; background: var(--accent); pointer-events: none; }
+.page-slider-pill { position: absolute; right: 20px; transform: translateY(-50%); padding: 6px 12px; border-radius: 999px; background: var(--accent); color: white; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; pointer-events: none; box-shadow: 0 6px 18px rgb(20 20 50 / 0.22); }
+.page-slider.active .page-slider-pill { opacity: 1; }
 :root.mac .reader-body { margin-top: 28px; } /* keeps the window buttons off the text */
 .pdf-container { position: absolute; inset: 0; overflow: auto; }
 /* Swipe turns exactly one page: each page snaps to the centre and a fling can't skip past it */

@@ -80,6 +80,7 @@ function pointsAt(doc: Document, offsets: number[]): ({ node: Node; offset: numb
 export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tools, textRef, onPrefsChange, onLocation, onSelect, onAnnotationClick, onClose }: ReaderProps) {
   const viewRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition>(null);
+  const bookRef = useRef<{ locations: { length: () => number; cfiFromPercentage: (percent: number) => string } } | null>(null);
   const drawnRef = useRef(new Map<string, string>()); // annotation id → cfiRange|color currently drawn
   const clickRef = useRef(onAnnotationClick);
   const layout = effectiveLayout(prefs.layout);
@@ -89,6 +90,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
   const [renditionId, setRenditionId] = useState(0);
   const [toc, setToc] = useState<NavItem[]>([]);
   const [label, setLabel] = useState("Loading…");
+  const [place, setPlace] = useState<{ page: number; total: number }>();
   const labelRef = useRef("");
   const [error, setError] = useState<string>();
 
@@ -96,6 +98,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
 
   useEffect(() => {
     const book = ePub(bytes.slice(0));
+    bookRef.current = book;
     // Registered once the book is open so it runs after epub.js's own resource rewrite (which replaces the output)
     book.opened.then(() =>
       book.spine.hooks.serialize.register((_: string, section: { output: string }) => {
@@ -158,6 +161,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
       const page = pageOf(loc.cfi);
       const text = page ? `${chapter} · Page ${page.n} / ${page.total}` : chapter;
       setLabel(text);
+      setPlace(page ? { page: page.n, total: page.total } : undefined);
       lastCfi.current = loc.cfi;
       labelRef.current = chapter;
       // Until pages are counted, progress falls back to the chapter position
@@ -235,6 +239,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
     return () => {
       window.removeEventListener("keyup", onKey);
       renditionRef.current = null;
+      bookRef.current = null;
       book.destroy();
     };
     // Rebuild only for a different document or layout
@@ -380,6 +385,16 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
     // A new rendition (layout switch) starts with no highlights drawn
   }, [annotations, renditionId]);
 
+  function seekPage(page: number) {
+    const book = bookRef.current;
+    const rendition = renditionRef.current;
+    if (!book || !rendition) return;
+    const total = book.locations.length();
+    if (total < 2) return;
+    const cfi = book.locations.cfiFromPercentage((page - 1) / (total - 1));
+    if (cfi) rendition.display(cfi);
+  }
+
   return (
     <ReaderChrome
       title={doc.title}
@@ -387,6 +402,7 @@ export function EpubReader({ doc, bytes, initial, goTo, prefs, annotations, tool
       onClose={onClose}
       onPrev={() => renditionRef.current?.prev()}
       onNext={() => renditionRef.current?.next()}
+      scrub={place && place.total > 1 ? { page: place.page, total: place.total, onSeek: seekPage } : undefined}
       theme={prefs.theme}
       prefs={{ value: prefs, onChange: onPrefsChange }}
       tools={
